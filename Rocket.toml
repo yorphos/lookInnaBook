@@ -1,0 +1,5 @@
+[global.databases]
+postgres = { url = "postgres://steven:dbPass@127.0.0.1/lookInnaBook" }
+
+[default]
+template_dir = "templates"

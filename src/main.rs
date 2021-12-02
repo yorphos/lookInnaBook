@@ -1,29 +1,24 @@
 #[macro_use]
 extern crate rocket;
 
+mod db;
+mod endpoints;
 mod schema;
 
-use rocket_sync_db_pools::{database, postgres};
-
-#[database("postgres")]
-struct DbConn(postgres::Client);
-
-#[get("/books")]
-async fn books(conn: DbConn) -> String {
-    let mut result = String::new();
-    if let Ok(v) = conn.run(|c| c.query("SELECT * FROM base.book", &[])).await {
-        for row in v {
-            result += &row.get::<&str, String>("title");
-            result += "\n";
-        }
-    }
-
-    result
-}
+use db::conn::DbConn;
+use endpoints::*;
+use rocket::fs::FileServer;
+use rocket_dyn_templates::Template;
 
 #[launch]
 fn rocket() -> _ {
     rocket::build()
-        .mount("/", routes![books])
+        .mount(
+            "/",
+            routes![book, index, login, login_page, customer_page, owner_page],
+        )
+        .mount("/style", FileServer::from("style/"))
+        .mount("/images", FileServer::from("image/"))
         .attach(DbConn::fairing())
+        .attach(Template::fairing())
 }

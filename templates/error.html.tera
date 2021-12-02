@@ -1,0 +1,5 @@
+{% extends "base" %}
+
+{% block content %}
+{{ error }}
+{% endblock content %}

@@ -1,0 +1,15 @@
+{% extends "base" %}
+
+{% block header %}
+<a href="/">Home</a>
+{% endblock header %}
+
+{% block content %}
+
+Title: {{ title }}
+Author: {{ author_name }}
+Genre: {{ genre }}
+Pages: {{ num_pages }}
+Price: {{ price }}
+
+{% endblock content %}

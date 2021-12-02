@@ -1,0 +1,22 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="style/index.css" />
+{% endblock head %}
+
+{% block header %}
+<a href="/login">Login</a>
+{% endblock header %}
+
+{% block content %}
+
+<ul>
+{% for book in books %}
+<li>
+    <a href="/book/{{book.isbn}}">{{book.title}}</a>
+</li>
+{% endfor %}
+</ul>
+
+{% endblock content %}

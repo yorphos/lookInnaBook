@@ -1,0 +1,31 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="style/login.css" />
+{% endblock head %}
+
+{% block header %}
+<a href="/">Home</a>
+{% endblock header %}
+
+{% block content %}
+
+<form action="/login" method="post">
+  <ul>
+    <li>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required></input>
+    </li>
+    <li>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required></input>
+    </li>
+    <li>
+      <button type="submit">Login</button>
+    </li>
+  </ul>
+</form>
+
+
+{% endblock content %}
