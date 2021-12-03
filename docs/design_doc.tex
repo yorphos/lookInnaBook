@@ -60,8 +60,9 @@ The above ER diagram can be broken down into the relation schema below. Primary 
 \end{itemize}
 
 \section{Functional Dependencies}
+Below are the functional dependencies for this domain.
 \begin{itemize}
-  \item ISBN \trightarrow{} Title, AuthorName, Genre, Publisher, NumPages, Price, AuthorRoyalties, ReorderThreshold, PublisherAccountID
+  \item ISBN \trightarrow{} Title, AuthorName, Genre, Publisher, NumPages, Price, AuthorRoyalties, ReorderThreshold
   \item AddressID \trightarrow{} StreetAddress, PostalCode, Province
   \item CustomerID \trightarrow{} CustomerName, CustomerEmail, CustomerPasswordHash, CustomerPasswordSalt, DefaultShippingAddressID, DefaultPaymentInfoID
   \item PaymentInfoID \trightarrow{} NameOnCard, ExpiryDate, CardNumber, CVV, BillingAddressID
@@ -73,5 +74,45 @@ The above ER diagram can be broken down into the relation schema below. Primary 
   \item OwnerID \trightarrow{} OwnerName, OwnerEmail, OwnerPasswordHash, OwnerPasswordSalt
   \item BookCollectionID \trightarrow{} OwnerID
 \end{itemize}
+
+\section{Testing For Good Form}
+We will now test to make sure that all of our relations are in good form. We will test that each relation is in 3NF.
+\subsection{Book}
+Functional dependencies:
+\begin{itemize}
+  \item ISBN \trightarrow{} Title, AuthorName, Genre, Publisher, NumPages, Price, AuthorRoyalties, ReorderThreshold
+\end{itemize}
+
+ISBN is trivially a super key so this relation is in BCNF.
+
+\subsection{AddressID}
+Functional dependencies:
+\begin{itemize}
+  \item AddressID \trightarrow{} StreetAddress, PostalCode, Province
+\end{itemize}
+
+AddressID is trivially a super key for address.
+
+\subsection{Customer, PaymentInfo, Publisher, Order, RestockOrder, Owner, BookCollection}
+All of these relations are also 3NF in a similar way where there is only one functional dependency which is some ID attribute to the rest of the relation.
+
+\subsection{InOrder}
+Functional dependencies:
+\begin{itemize}
+  \item OrderID, BookISBN \trightarrow{} OrderQuantity
+\end{itemize}
+
+(OrderID, BookISBN) is trivially the super key since it determines the other attribute in the relation.
+
+\subsection{InCart}
+Functional dependencies:
+\begin{itemize}
+  \item CustomerID, BookISBN \trightarrow{} CartQuantity
+\end{itemize}
+
+(CustomerID, BookISBN) is trivially the super key since it determines the other attribute in the relation.
+
+All of our relations are in good form.
+
 
 \end{document}

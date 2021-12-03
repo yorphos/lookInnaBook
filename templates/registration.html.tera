@@ -1,0 +1,78 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="style/registration.css" />
+{% endblock head %}
+
+{% block header %}
+<a href="/">Home</a>
+<a href="/login">Login</a>
+{% endblock header %}
+
+{% block content %}
+
+<h1>Register Customer</h1>
+
+<form action="/register" method="post">
+  <ul>
+    <li>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required></input>
+    </li>
+    <li>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required></input>
+    </li>
+    <li>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required></input>
+    </li>
+    <li>
+        <label for="street-address">Street Address:</label>
+        <input type="text" id="street-address" name="street_address" required></input>
+    </li>
+    <li>
+        <label for="postal-code">Postal Code:</label>
+        <input type="text" id="postal-code" name="postal_code" required></input>
+    </li>
+    <li>
+        <label for="province">Province:</label>
+        <input type="text" id="province" name="province" required></input>
+    </li>
+    <li>
+        <label for="card-number">Credit Card Number:</label>
+        <input type="text" id="card-number" name="card_number" required></input>
+    </li>
+    <li>
+        <label for="name-on-card">Name on Card:</label>
+        <input type="text" id="name-on-card" name="name_on_card" required></input>
+    </li>
+    <li>
+        <label for="expiry">Card Expiry:</label>
+        <input type="text" id="expiry" name="expiry" required></input>
+    </li>
+    <li>
+        <label for="cvv">Card CVV:</label>
+        <input type="text" id="cvv" name="cvv" required></input>
+    </li>
+    <li>
+        <label for="billing-street-address">Billing Street Address:</label>
+        <input type="text" id="billing-street-address" name="billing_street_address" required></input>
+    </li>
+    <li>
+        <label for="billing-postal-code">Postal Code:</label>
+        <input type="text" id="billing-postal-code" name="billing_postal_code" required></input>
+    </li>
+    <li>
+        <label for="billing-province">Province:</label>
+        <input type="text" id="billing-province" name="billing_province" required></input>
+    </li>
+    <li>
+      <button type="submit">Register</button>
+    </li>
+  </ul>
+</form>
+
+
+{% endblock content %}

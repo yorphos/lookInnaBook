@@ -1,12 +1,12 @@
 {% extends "base" %}
 
-
 {% block head %}
-    <link rel="stylesheet" href="style/index.css" />
+<link rel="stylesheet" href="style/header.css" />
 {% endblock head %}
 
 {% block header %}
 <a href="/login">Login</a>
+<a href="/register">Register</a>
 {% endblock header %}
 
 {% block content %}

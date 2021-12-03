@@ -7,9 +7,12 @@
 
 {% block header %}
 <a href="/">Home</a>
+<a href="/register">Register</a>
 {% endblock header %}
 
 {% block content %}
+
+<h1>Customer Login</h1>
 
 <form action="/login" method="post">
   <ul>

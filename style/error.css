@@ -1,0 +1,17 @@
+@import "header.css";
+
+h1 {
+    text-align: center;
+}
+
+.error {
+    text-align: center;
+}
+
+.back-container {
+    text-align: center;
+}
+
+.back-container > button {
+    margin: 20px;
+}

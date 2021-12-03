@@ -1,5 +1,21 @@
 {% extends "base" %}
 
+{% block head %}
+    <link rel="stylesheet" href="/style/error.css" />
+{% endblock head %}
+
+{% block header %}
+<a href="/">Home</a>
+<a href="/login">Login</a>
+<a href="/register">Register</a>
+{% endblock header %}
+
 {% block content %}
+<h1>Error</h1>
+<div class="error">
 {{ error }}
+</div>
+<div class="back-container">
+<button onclick="history.back()">Go Back!</button>
+</div>
 {% endblock content %}

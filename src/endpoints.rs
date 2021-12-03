@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
-use crate::db::query::{get_books, validate_login, LoginType};
+use crate::db::query::{
+    get_books, try_create_new_customer, validate_login, AddressInsert, Expiry, LoginType,
+    PaymentInfoInsert,
+};
 use crate::schema::entities::PostgresInt;
 use rocket::form::Form;
 use rocket::response::Redirect;
@@ -25,6 +28,26 @@ pub async fn index(conn: DbConn) -> Template {
 pub async fn login_page() -> Template {
     let context = HashMap::<&str, &str>::new();
     Template::render("login", &context)
+}
+
+#[get("/login/failed/<e>")]
+pub async fn login_failed(e: &str) -> Template {
+    let mut context = HashMap::<&str, String>::new();
+    context.insert("error", format!("Login Failed: {}", e));
+    Template::render("error", &context)
+}
+
+#[get("/register")]
+pub async fn register_page() -> Template {
+    let context = HashMap::<&str, &str>::new();
+    Template::render("registration", &context)
+}
+
+#[get("/register/failed/<reason>")]
+pub async fn register_failed(reason: &str) -> Template {
+    let mut context = HashMap::<&str, String>::new();
+    context.insert("error", format!("Registration Failed: {}", reason));
+    Template::render("error", &context)
 }
 
 #[get("/customer/<customer_id>")]
@@ -51,12 +74,72 @@ pub async fn login(conn: DbConn, login_data: Form<Login<'_>>) -> Redirect {
         Ok(v) => {
             use LoginType::*;
             match v {
-                FailedLogin => Redirect::to(uri!("/login/failed")),
+                FailedLogin => Redirect::to(uri!(login_failed("Invalid Email/Password"))),
                 CustomerLogin(customer_id) => Redirect::to(uri!(customer_page(customer_id))),
                 OwnerLogin(customer_id) => Redirect::to(uri!(owner_page(customer_id))),
             }
         }
-        Err(e) => Redirect::to(uri!("/login/failed")),
+        Err(e) => Redirect::to(uri!(login_failed("Server error occured"))),
+    }
+}
+
+#[derive(FromForm)]
+pub struct Register<'r> {
+    email: &'r str,
+    name: &'r str,
+    password: &'r str,
+    street_address: &'r str,
+    postal_code: &'r str,
+    province: &'r str,
+    name_on_card: &'r str,
+    card_number: &'r str,
+    expiry: &'r str,
+    cvv: &'r str,
+    billing_street_address: &'r str,
+    billing_postal_code: &'r str,
+    billing_province: &'r str,
+}
+
+#[post("/register", data = "<register_data>")]
+pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redirect {
+    let Register {
+        email,
+        name,
+        password,
+        street_address,
+        postal_code,
+        province,
+        name_on_card,
+        card_number,
+        expiry,
+        cvv,
+        billing_street_address,
+        billing_postal_code,
+        billing_province,
+    } = *register_data;
+
+    let address = AddressInsert::new(street_address, postal_code, province);
+    let billing_address = AddressInsert::new(
+        billing_street_address,
+        billing_postal_code,
+        billing_province,
+    );
+
+    let expiry = if let Some(e) = Expiry::from_str(expiry) {
+        e
+    } else {
+        return Redirect::to(uri!(register_failed(format!(
+            "{:?}",
+            "Invalid Credit Card Expiry"
+        ))));
+    };
+
+    let payment_info =
+        PaymentInfoInsert::new(name_on_card, expiry, card_number, cvv, billing_address);
+
+    match try_create_new_customer(&conn, email, password, name, address, payment_info).await {
+        Ok(customer_id) => Redirect::to(uri!(customer_page(customer_id))),
+        Err(e) => Redirect::to(uri!(register_failed(format!("{:?}", e)))),
     }
 }
 
