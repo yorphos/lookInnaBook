@@ -6,14 +6,10 @@ pub mod conn {
 }
 
 pub mod query {
+    use postgres::GenericClient;
+
     use super::conn::DbConn;
     use crate::schema::entities::*;
-
-    pub enum LoginType {
-        OwnerLogin(PostgresInt),
-        CustomerLogin(PostgresInt),
-        FailedLogin,
-    }
 
     pub async fn get_books(conn: &DbConn) -> Result<Vec<Book>, postgres::error::Error> {
         let rows = conn
@@ -22,12 +18,12 @@ pub mod query {
         Ok(rows.iter().flat_map(|row| Book::from_row(row)).collect())
     }
 
-    pub async fn validate_login<T: AsRef<str>>(
+    pub async fn validate_customer_login<T: AsRef<str>>(
         conn: &DbConn,
         email: T,
         password: T,
-    ) -> Result<LoginType, postgres::error::Error> {
-        Ok(LoginType::FailedLogin)
+    ) -> Result<bool, postgres::error::Error> {
+        Ok(false)
     }
 
     pub async fn does_customer_with_email_exist<'a, T: AsRef<str>>(
@@ -86,14 +82,14 @@ pub mod query {
 
     impl Expiry {
         pub fn from_str<T: AsRef<str>>(s: T) -> Option<Expiry> {
-            let mut split = s.as_ref().split("/");
+            let mut split = s.as_ref().split('/');
             let month = split.next()?.parse().ok()?;
             if month < 1 || month > 12 {
                 return None;
             }
 
             let year = split.next()?.parse().ok()?;
-            if year < 2021 {
+            if year < 21 {
                 return None;
             }
 
@@ -152,7 +148,7 @@ pub mod query {
         let billing_address_id = try_add_address(conn, billing_address).await?;
         Ok(conn.run(move |c| {
             c.query_one(
-                "INSERT INTO base.payment_info (name_on_card, expiry, card_number, cvv, billing_address) VALUES ($1, $2, $3, $4) RETURNING payment_info_id",
+                "INSERT INTO base.payment_info (name_on_card, expiry, card_number, cvv, billing_address_id) VALUES ($1, $2, $3, $4, $5) RETURNING payment_info_id",
                 &[&name_on_card, &expiry.to_string(), &card_number, &cvv, &billing_address_id],
             )
         }).await?.get("payment_info_id"))
@@ -184,5 +180,42 @@ pub mod query {
             })
             .await?
             .get("customer_id"))
+    }
+
+    pub async fn owner_exists(conn: &DbConn) -> Result<bool, postgres::error::Error> {
+        Ok(!conn
+            .run(|c| c.query("SELECT * FROM base.owner;", &[]))
+            .await?
+            .is_empty())
+    }
+
+    pub async fn validate_owner_login<T: AsRef<str>>(
+        conn: &DbConn,
+        email: T,
+        password: T,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let email = email.as_ref().to_owned();
+        let password = password.as_ref().to_owned();
+
+        if !owner_exists(conn).await? {
+            Ok(email == "admin@local" && password == "default")
+        } else {
+            let owner = conn
+                .run(move |c| {
+                    c.query_opt(
+                        "SELECT password_hash FROM base.customer WHERE email = $1",
+                        &[&email],
+                    )
+                })
+                .await?;
+
+            match owner {
+                Some(owner) => {
+                    let password_hash = owner.get("password_hash");
+                    Ok(bcrypt::verify(password, password_hash)?)
+                }
+                None => Ok(false),
+            }
+        }
     }
 }

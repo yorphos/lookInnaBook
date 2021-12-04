@@ -2,10 +2,9 @@ use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
 use crate::db::query::{
-    get_books, try_create_new_customer, validate_login, AddressInsert, Expiry, LoginType,
+    get_books, try_create_new_customer, validate_customer_login, AddressInsert, Expiry,
     PaymentInfoInsert,
 };
-use crate::schema::entities::PostgresInt;
 use rocket::form::Form;
 use rocket::response::Redirect;
 use rocket_dyn_templates::Template;
@@ -50,14 +49,14 @@ pub async fn register_failed(reason: &str) -> Template {
     Template::render("error", &context)
 }
 
-#[get("/customer/<customer_id>")]
-pub async fn customer_page(customer_id: PostgresInt) -> Template {
+#[get("/customer")]
+pub async fn customer_page() -> Template {
     let context = HashMap::<&str, &str>::new();
     Template::render("customer", &context)
 }
 
-#[get("/owner/<owner_id>")]
-pub async fn owner_page(owner_id: PostgresInt) -> Template {
+#[get("/owner")]
+pub async fn owner_page() -> Template {
     let context = HashMap::<&str, &str>::new();
     Template::render("owner", &context)
 }
@@ -70,15 +69,11 @@ pub struct Login<'r> {
 
 #[post("/login", data = "<login_data>")]
 pub async fn login(conn: DbConn, login_data: Form<Login<'_>>) -> Redirect {
-    match validate_login(&conn, login_data.email, login_data.password).await {
-        Ok(v) => {
-            use LoginType::*;
-            match v {
-                FailedLogin => Redirect::to(uri!(login_failed("Invalid Email/Password"))),
-                CustomerLogin(customer_id) => Redirect::to(uri!(customer_page(customer_id))),
-                OwnerLogin(customer_id) => Redirect::to(uri!(owner_page(customer_id))),
-            }
-        }
+    match validate_customer_login(&conn, login_data.email, login_data.password).await {
+        Ok(v) => match v {
+            false => Redirect::to(uri!(login_failed("Invalid Email/Password"))),
+            true => Redirect::to(uri!(customer_page())),
+        },
         Err(e) => Redirect::to(uri!(login_failed("Server error occured"))),
     }
 }
@@ -138,7 +133,7 @@ pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redire
         PaymentInfoInsert::new(name_on_card, expiry, card_number, cvv, billing_address);
 
     match try_create_new_customer(&conn, email, password, name, address, payment_info).await {
-        Ok(customer_id) => Redirect::to(uri!(customer_page(customer_id))),
+        Ok(customer_id) => Redirect::to(uri!(customer_page())),
         Err(e) => Redirect::to(uri!(register_failed(format!("{:?}", e)))),
     }
 }
