@@ -65,6 +65,7 @@ Below are the functional dependencies for this domain.
   \item ISBN \trightarrow{} Title, AuthorName, Genre, Publisher, NumPages, Price, AuthorRoyalties, ReorderThreshold
   \item AddressID \trightarrow{} StreetAddress, PostalCode, Province
   \item CustomerID \trightarrow{} CustomerName, CustomerEmail, CustomerPasswordHash, CustomerPasswordSalt, DefaultShippingAddressID, DefaultPaymentInfoID
+  \item Email \trightarrow{} CustomerID, CustomerName, CustomerPasswordHash, CustomerPasswordSalt, DefaultShippingAddressID, DefaultPaymentInfoID
   \item PaymentInfoID \trightarrow{} NameOnCard, ExpiryDate, CardNumber, CVV, BillingAddressID
   \item PublisherID \trightarrow{} CompanyName, PhoneNumber, BankInformation, AddressID
   \item OrderID \trightarrow{} CustomerID, TrackingNum, OrderStatus, OrderDate, ShippingAddressID, PaymentInfoID
@@ -93,7 +94,15 @@ Functional dependencies:
 
 AddressID is trivially a super key for address.
 
-\subsection{Customer, PaymentInfo, Publisher, Order, RestockOrder, Owner, BookCollection}
+\subsection{Customer}
+\begin{itemize}
+  \item CustomerID \trightarrow{} CustomerName, CustomerEmail, CustomerPasswordHash, CustomerPasswordSalt, DefaultShippingAddressID, DefaultPaymentInfoID
+  \item CustomerEmail \trightarrow{} CustomerID, CustomerName, CustomerPasswordHash, CustomerPasswordSalt, DefaultShippingAddressID, DefaultPaymentInfoID
+\end{itemize}
+
+Both CustomerID and CustomerEmail are trivially superkeys.
+
+\subsection{PaymentInfo, Publisher, Order, RestockOrder, Owner, BookCollection}
 All of these relations are also 3NF in a similar way where there is only one functional dependency which is some ID attribute to the rest of the relation.
 
 \subsection{InOrder}

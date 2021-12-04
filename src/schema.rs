@@ -60,3 +60,67 @@ pub mod entities {
         }
     }
 }
+
+pub mod joined {
+    use rocket::serde::Serialize;
+
+    #[derive(Serialize, Clone, Debug)]
+    pub struct Customer {
+        pub name: String,
+        pub email: String,
+        pub street_address: String,
+        pub postal_code: String,
+        pub province: String,
+        pub name_on_card: String,
+        pub expiry: String,
+        pub billing_street_address: String,
+        pub billing_postal_code: String,
+        pub billing_province: String,
+    }
+}
+
+pub mod no_id {
+    use crate::db::query::Expiry;
+
+    pub struct Address {
+        pub street_address: String,
+        pub postal_code: String,
+        pub province: String,
+    }
+
+    impl Address {
+        pub fn new<T: AsRef<str>>(street_address: T, postal_code: T, province: T) -> Address {
+            Address {
+                street_address: street_address.as_ref().to_string(),
+                postal_code: postal_code.as_ref().to_string(),
+                province: province.as_ref().to_string(),
+            }
+        }
+    }
+
+    pub struct PaymentInfo {
+        pub name_on_card: String,
+        pub expiry: Expiry,
+        pub card_number: String,
+        pub cvv: String,
+        pub billing_address: Address,
+    }
+
+    impl PaymentInfo {
+        pub fn new<T: AsRef<str>>(
+            name_on_card: T,
+            expiry: Expiry,
+            card_number: T,
+            cvv: T,
+            billing_address: Address,
+        ) -> PaymentInfo {
+            PaymentInfo {
+                name_on_card: name_on_card.as_ref().to_string(),
+                expiry,
+                card_number: card_number.as_ref().to_string(),
+                cvv: cvv.as_ref().to_string(),
+                billing_address,
+            }
+        }
+    }
+}

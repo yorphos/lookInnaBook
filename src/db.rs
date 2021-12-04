@@ -5,11 +5,75 @@ pub mod conn {
     pub struct DbConn(postgres::Client);
 }
 
-pub mod query {
-    use postgres::GenericClient;
+pub mod error {
+    use std::error::Error;
+    use std::fmt::Display;
 
+    use bcrypt::BcryptError;
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct CredentialError {}
+
+    impl CredentialError {
+        pub fn new() -> CredentialError {
+            CredentialError {}
+        }
+    }
+
+    impl Error for CredentialError {}
+
+    impl Display for CredentialError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Invalid email/password")
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum LoginError {
+        DBError(postgres::error::Error),
+        CredentialError(CredentialError),
+        BCryptError(bcrypt::BcryptError),
+    }
+
+    impl Error for LoginError {}
+
+    impl Display for LoginError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::DBError(err) => Display::fmt(&err, f),
+                Self::CredentialError(err) => Display::fmt(&err, f),
+                Self::BCryptError(err) => Display::fmt(&err, f),
+            }
+        }
+    }
+
+    impl From<postgres::error::Error> for LoginError {
+        fn from(e: postgres::error::Error) -> Self {
+            LoginError::DBError(e)
+        }
+    }
+
+    impl From<CredentialError> for LoginError {
+        fn from(e: CredentialError) -> Self {
+            LoginError::CredentialError(e)
+        }
+    }
+
+    impl From<BcryptError> for LoginError {
+        fn from(e: BcryptError) -> Self {
+            LoginError::BCryptError(e)
+        }
+    }
+}
+
+pub mod query {
     use super::conn::DbConn;
+    use super::error::LoginError;
+    use crate::db::error::CredentialError;
     use crate::schema::entities::*;
+    use crate::schema::no_id;
+    use postgres::GenericClient;
+    use serde::Serialize;
 
     pub async fn get_books(conn: &DbConn) -> Result<Vec<Book>, postgres::error::Error> {
         let rows = conn
@@ -22,8 +86,32 @@ pub mod query {
         conn: &DbConn,
         email: T,
         password: T,
-    ) -> Result<bool, postgres::error::Error> {
-        Ok(false)
+    ) -> Result<PostgresInt, LoginError> {
+        let email = email.as_ref().to_owned();
+        let password = password.as_ref().to_owned();
+
+        let customer = conn
+            .run(move |c| {
+                c.query_opt(
+                    "SELECT customer_id, password_hash FROM base.customer WHERE email = $1",
+                    &[&email],
+                )
+            })
+            .await?;
+
+        match customer {
+            Some(customer) => {
+                let customer_id = customer.get("customer_id");
+                let password_hash = customer.get("password_hash");
+
+                if bcrypt::verify(password, password_hash)? {
+                    Ok(customer_id)
+                } else {
+                    Err(CredentialError::new())?
+                }
+            }
+            None => Err(CredentialError::new())?,
+        }
     }
 
     pub async fn does_customer_with_email_exist<'a, T: AsRef<str>>(
@@ -42,27 +130,11 @@ pub mod query {
             .is_some())
     }
 
-    pub struct AddressInsert {
-        street_address: String,
-        postal_code: String,
-        province: String,
-    }
-
-    impl AddressInsert {
-        pub fn new<T: AsRef<str>>(street_address: T, postal_code: T, province: T) -> AddressInsert {
-            AddressInsert {
-                street_address: street_address.as_ref().to_string(),
-                postal_code: postal_code.as_ref().to_string(),
-                province: province.as_ref().to_string(),
-            }
-        }
-    }
-
     pub async fn try_add_address(
         conn: &DbConn,
-        address: AddressInsert,
+        address: no_id::Address,
     ) -> Result<PostgresInt, postgres::error::Error> {
-        let AddressInsert {
+        let no_id::Address {
             street_address,
             postal_code,
             province,
@@ -75,6 +147,7 @@ pub mod query {
         }).await?.get("address_id"))
     }
 
+    #[derive(Debug, Clone, Copy, Serialize)]
     pub struct Expiry {
         month: u32,
         year: u32,
@@ -107,37 +180,11 @@ pub mod query {
         }
     }
 
-    pub struct PaymentInfoInsert {
-        name_on_card: String,
-        expiry: Expiry,
-        card_number: String,
-        cvv: String,
-        billing_address: AddressInsert,
-    }
-
-    impl PaymentInfoInsert {
-        pub fn new<T: AsRef<str>>(
-            name_on_card: T,
-            expiry: Expiry,
-            card_number: T,
-            cvv: T,
-            billing_address: AddressInsert,
-        ) -> PaymentInfoInsert {
-            PaymentInfoInsert {
-                name_on_card: name_on_card.as_ref().to_string(),
-                expiry,
-                card_number: card_number.as_ref().to_string(),
-                cvv: cvv.as_ref().to_string(),
-                billing_address,
-            }
-        }
-    }
-
     pub async fn try_add_payment_info(
         conn: &DbConn,
-        payment_info: PaymentInfoInsert,
+        payment_info: no_id::PaymentInfo,
     ) -> Result<PostgresInt, postgres::error::Error> {
-        let PaymentInfoInsert {
+        let no_id::PaymentInfo {
             name_on_card,
             expiry,
             card_number,
@@ -159,8 +206,8 @@ pub mod query {
         email: T,
         password: T,
         name: T,
-        address: AddressInsert,
-        payment_info: PaymentInfoInsert,
+        address: no_id::Address,
+        payment_info: no_id::PaymentInfo,
     ) -> Result<PostgresInt, Box<dyn std::error::Error>> {
         let name = name.as_ref().to_string();
         let email = email.as_ref().to_string();
@@ -217,5 +264,50 @@ pub mod query {
                 None => Ok(false),
             }
         }
+    }
+
+    pub async fn get_customer_info(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+    ) -> Result<Option<crate::schema::joined::Customer>, postgres::error::Error> {
+        Ok(conn
+            .run(move |c| {
+                c.query_opt(
+                    "
+                SELECT
+                customer_id,
+                name,
+                email,
+                expiry,
+                name_on_card,
+                def_shipping.street_address AS def_street_address,
+                def_shipping.postal_code AS def_postal,
+                def_shipping.province AS def_province,
+                billing_add.street_address AS bill_street_address,
+                billing_add.postal_code AS bill_postal,
+                billing_add.province AS bill_province
+                FROM
+                base.customer AS customer
+                INNER JOIN base.address AS def_shipping ON customer.default_shipping_address = def_shipping.address_id
+                INNER JOIN base.payment_info AS payment ON customer.default_payment_info_id = payment.payment_info_id
+                INNER JOIN base.address AS billing_add ON payment.billing_address_id = billing_add.address_id
+                WHERE customer.customer_id = $1;
+            ",
+                    &[&customer_id],
+                )
+            })
+            .await?
+            .map(|row| crate::schema::joined::Customer {
+                name: row.get("name"),
+                email: row.get("email"),
+                street_address: row.get("def_street_address"),
+                postal_code: row.get("def_postal"),
+                province: row.get("def_province"),
+                expiry: row.get("expiry"),
+                name_on_card: row.get("name_on_card"),
+                billing_street_address: row.get("bill_street_address"),
+                billing_postal_code: row.get("bill_postal"),
+                billing_province: row.get("bill_province"),
+            }))
     }
 }

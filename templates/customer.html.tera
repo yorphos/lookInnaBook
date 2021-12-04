@@ -1,0 +1,17 @@
+{% extends "base" %}
+
+{% block head %}
+    <link rel="stylesheet" href="style/customer.css" />
+{% endblock head %}
+
+{% block header %}
+<a href="/">Home</a>
+{% endblock header %}
+
+{% block content %}
+
+<h1>Customer Profile</h1>
+
+Name: {{ name }}
+
+{% endblock content %}

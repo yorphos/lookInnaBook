@@ -61,11 +61,11 @@
         <input type="text" id="billing-street-address" name="billing_street_address" required></input>
     </li>
     <li>
-        <label for="billing-postal-code">Postal Code:</label>
+        <label for="billing-postal-code">Billing Postal Code:</label>
         <input type="text" id="billing-postal-code" name="billing_postal_code" required></input>
     </li>
     <li>
-        <label for="billing-province">Province:</label>
+        <label for="billing-province">Billing Province:</label>
         <input type="text" id="billing-province" name="billing_province" required></input>
     </li>
     <li>

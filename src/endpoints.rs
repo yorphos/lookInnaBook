@@ -2,12 +2,19 @@ use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
 use crate::db::query::{
-    get_books, try_create_new_customer, validate_customer_login, AddressInsert, Expiry,
-    PaymentInfoInsert,
+    get_books, get_customer_info, try_create_new_customer, validate_customer_login, Expiry,
 };
+use crate::request_guards::state::SessionType;
+use crate::schema::no_id;
+use chrono::{Duration, Local};
+use rand::{RngCore, SeedableRng};
 use rocket::form::Form;
+use rocket::http::{Cookie, CookieJar};
 use rocket::response::Redirect;
+use rocket::State;
 use rocket_dyn_templates::Template;
+
+use crate::{request_guards::*, SessionTokenState};
 
 #[get("/")]
 pub async fn index(conn: DbConn) -> Template {
@@ -50,8 +57,25 @@ pub async fn register_failed(reason: &str) -> Template {
 }
 
 #[get("/customer")]
-pub async fn customer_page() -> Template {
-    let context = HashMap::<&str, &str>::new();
+pub async fn customer_page(cust: Customer, conn: DbConn) -> Template {
+    let mut context = HashMap::<&str, String>::new();
+
+    let customer_info = match get_customer_info(&conn, cust.customer_id).await {
+        Ok(v) => match v {
+            Some(v) => v,
+            None => {
+                context.insert("error", "Server error: No such customer".to_string());
+                return Template::render("error", &context);
+            }
+        },
+        Err(e) => {
+            context.insert("error", format!("Server error: {}", e));
+            return Template::render("error", &context);
+        }
+    };
+
+    context.insert("name", customer_info.name);
+
     Template::render("customer", &context)
 }
 
@@ -68,13 +92,32 @@ pub struct Login<'r> {
 }
 
 #[post("/login", data = "<login_data>")]
-pub async fn login(conn: DbConn, login_data: Form<Login<'_>>) -> Redirect {
+pub async fn login(
+    conn: DbConn,
+    login_data: Form<Login<'_>>,
+    session_tokens: &State<SessionTokenState>,
+    cookies: &CookieJar<'_>,
+) -> Redirect {
     match validate_customer_login(&conn, login_data.email, login_data.password).await {
-        Ok(v) => match v {
-            false => Redirect::to(uri!(login_failed("Invalid Email/Password"))),
-            true => Redirect::to(uri!(customer_page())),
+        Ok(customer_id) => {
+            let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
+            let mut token: [u8; 32] = [0; 32];
+            rng.fill_bytes(&mut token);
+
+            let token = base64::encode(token);
+
+            cookies.add_private(Cookie::new(CUST_SESSION_COOKIE_NAME, token.clone()));
+
+            let mut session_tokens = session_tokens.lock().await;
+
+            let expiry = Local::now() + Duration::days(30);
+
+            session_tokens.insert(token, (SessionType::Customer(customer_id), expiry));
+            Redirect::to(uri!(customer_page()))
+        }
+        Err(e) => match e {
+            _ => Redirect::to(uri!(login_failed("Invalid email/password"))),
         },
-        Err(e) => Redirect::to(uri!(login_failed("Server error occured"))),
     }
 }
 
@@ -113,8 +156,8 @@ pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redire
         billing_province,
     } = *register_data;
 
-    let address = AddressInsert::new(street_address, postal_code, province);
-    let billing_address = AddressInsert::new(
+    let address = no_id::Address::new(street_address, postal_code, province);
+    let billing_address = no_id::Address::new(
         billing_street_address,
         billing_postal_code,
         billing_province,
@@ -130,10 +173,10 @@ pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redire
     };
 
     let payment_info =
-        PaymentInfoInsert::new(name_on_card, expiry, card_number, cvv, billing_address);
+        no_id::PaymentInfo::new(name_on_card, expiry, card_number, cvv, billing_address);
 
     match try_create_new_customer(&conn, email, password, name, address, payment_info).await {
-        Ok(customer_id) => Redirect::to(uri!(customer_page())),
+        Ok(_) => Redirect::to(uri!(customer_page())),
         Err(e) => Redirect::to(uri!(register_failed(format!("{:?}", e)))),
     }
 }
