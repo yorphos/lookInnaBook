@@ -1,15 +1,24 @@
 {% extends "base" %}
 
-{% block header %}
-<a href="/">Home</a>
-{% endblock header %}
+{% block head %}
+<link rel="stylesheet" href="/style/book.css" />
+{% endblock head %}
 
 {% block content %}
 
-Title: {{ title }}
-Author: {{ author_name }}
-Genre: {{ genre }}
-Pages: {{ num_pages }}
-Price: {{ price }}
+<p>Title: {{ book.title }}</p>
+<p>Author: {{ book.author_name }}</p>
+<p>Genre: {{ book.genre }}</p>
+<p>Pages: {{ book.num_pages }}</p>
+<p>Price: {{ book.price }}</p>
+{% if customer %}
+<p><button onclick=
+           "
+            fetch(window.location.origin + '/customer/cart/add/{{ book.isbn }}',
+            {
+            method: 'PUT',
+            });
+            ">Add To Cart</button></p>
+{% endif %}
 
 {% endblock content %}

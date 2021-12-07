@@ -1,22 +1,25 @@
 {% extends "base" %}
 
 {% block head %}
-<link rel="stylesheet" href="style/header.css" />
+<link rel="stylesheet" href="style/index.css" />
 {% endblock head %}
 
-{% block header %}
-<a href="/login">Login</a>
-<a href="/register">Register</a>
-{% endblock header %}
+{% block home_nav %}
+{% endblock home_nav %}
 
 {% block content %}
 
-<ul>
+<div class="books">
 {% for book in books %}
-<li>
-    <a href="/book/{{book.isbn}}">{{book.title}}</a>
-</li>
+<div class="book">
+    <a href="/book/{{ book.isbn }}">
+    <image src="https://via.placeholder.com/180"></image>
+    </a>
+    <h4>{{ book.title }}</h4>
+    <p>By: {{ book.author_name }}</p>
+    <a href="/book/{{ book.isbn }}">See more...</a>
+</div>
 {% endfor %}
-</ul>
+</div>
 
 {% endblock content %}

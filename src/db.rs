@@ -72,7 +72,6 @@ pub mod query {
     use crate::db::error::CredentialError;
     use crate::schema::entities::*;
     use crate::schema::no_id;
-    use postgres::GenericClient;
     use serde::Serialize;
 
     pub async fn get_books(conn: &DbConn) -> Result<Vec<Book>, postgres::error::Error> {
@@ -309,5 +308,55 @@ pub mod query {
                 billing_postal_code: row.get("bill_postal"),
                 billing_province: row.get("bill_province"),
             }))
+    }
+
+    pub async fn get_customer_cart(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+    ) -> Result<Vec<(ISBN, i32)>, postgres::error::Error> {
+        Ok(conn
+            .run(move |c| {
+                c.query(
+                    "SELECT isbn, quantity FROM base.in_cart WHERE customer_id = $1",
+                    &[&customer_id],
+                )
+            })
+            .await?
+            .iter()
+            .map(|row| (row.get("isbn"), row.get("quantity")))
+            .collect())
+    }
+
+    pub async fn add_to_cart(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+        isbn: ISBN,
+    ) -> Result<(), postgres::error::Error> {
+        let cart_row = conn
+            .run(move |c| {
+                c.query_opt(
+                    "SELECT quantity FROM base.in_cart WHERE customer_id = $1 AND isbn = $2",
+                    &[&customer_id, &isbn],
+                )
+            })
+            .await?;
+
+        match cart_row {
+            Some(_) => {
+                conn.run(move |c| c.execute("UPDATE base.in_cart SET quantity = quantity + 1 WHERE isbn = $1 AND customer_id = $2", &[&isbn, &customer_id]))
+                    .await?;
+                Ok(())
+            }
+            None => {
+                conn.run(move |c| {
+                    c.execute(
+                        "INSERT INTO base.in_cart (isbn, customer_id, quantity) VALUES ($1, $2, 1)",
+                        &[&isbn, &customer_id],
+                    )
+                })
+                .await?;
+                Ok(())
+            }
+        }
     }
 }

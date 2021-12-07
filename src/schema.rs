@@ -64,7 +64,7 @@ pub mod entities {
 pub mod joined {
     use rocket::serde::Serialize;
 
-    #[derive(Serialize, Clone, Debug)]
+    #[derive(Serialize, Clone, Debug, Default)]
     pub struct Customer {
         pub name: String,
         pub email: String,

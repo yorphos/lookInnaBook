@@ -1,0 +1,31 @@
+{% extends "base" %}
+
+{% block head %}
+<link rel="stylesheet" href="/style/customer_cart.css" />
+{% endblock head %}
+
+{% block cart_nav %}
+{% endblock cart_nav %}
+
+{% block content %}
+
+{% if cart_size > 0 %}
+<div class="cart-books">
+{% for book in books %}
+<div class="cart-book">
+    <a href="/book/{{ book.book.isbn }}">
+    <image src="https://via.placeholder.com/150"></image>
+    </a>
+    <h4>{{ book.book.title }}</h4>
+    <p>By: {{ book.book.author_name }}</p>
+    <p>Quantity: {{ book.quantity }}</p>
+    <a href="/book/{{ book.book.isbn }}">See more...</a>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<h1>No Books in Cart</h1>
+<button onclick="history.back()">Go Back!</button>
+{% endif %}
+
+{% endblock content %}

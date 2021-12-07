@@ -63,3 +63,23 @@ impl<'r> FromRequest<'r> for Customer {
         }
     }
 }
+
+pub enum OptionCustomer {
+    SomeCustomer(Customer),
+    NoCustomer,
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for OptionCustomer {
+    type Error = ();
+
+    async fn from_request(
+        request: &'r rocket::Request<'_>,
+    ) -> rocket::request::Outcome<Self, Self::Error> {
+        match Customer::from_request(request).await {
+            Outcome::Success(v) => Outcome::Success(OptionCustomer::SomeCustomer(v)),
+            Outcome::Forward(v) => Outcome::Forward(v),
+            Outcome::Failure(_) => Outcome::Success(OptionCustomer::NoCustomer),
+        }
+    }
+}

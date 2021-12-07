@@ -2,31 +2,61 @@ use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
 use crate::db::query::{
-    get_books, get_customer_info, try_create_new_customer, validate_customer_login, Expiry,
+    add_to_cart, get_books, get_customer_cart, get_customer_info, try_create_new_customer,
+    validate_customer_login, Expiry,
 };
 use crate::request_guards::state::SessionType;
-use crate::schema::no_id;
+use crate::schema::entities::ISBN;
+use crate::schema::{self, no_id};
 use chrono::{Duration, Local};
 use rand::{RngCore, SeedableRng};
+use rocket::form::validate::Contains;
 use rocket::form::Form;
-use rocket::http::{Cookie, CookieJar};
+use rocket::http::{Cookie, CookieJar, Status};
 use rocket::response::Redirect;
 use rocket::State;
+use rocket_dyn_templates::tera::Context;
 use rocket_dyn_templates::Template;
 
-use crate::{request_guards::*, SessionTokenState};
+use crate::{request_guards::OptionCustomer::*, request_guards::*, SessionTokenState};
+
+async fn add_customer_info(conn: &DbConn, customer: &OptionCustomer, context: &mut Context) {
+    if let SomeCustomer(customer) = customer {
+        if let Ok(customer_info) = get_customer_info(&conn, customer.customer_id).await {
+            context.insert("customer", &customer_info);
+        } else {
+            context.insert("customer", &crate::schema::joined::Customer::default());
+        }
+
+        if let Ok(cart) = get_customer_cart(&conn, customer.customer_id).await {
+            context.insert("cart_size", &cart.len());
+        } else {
+            context.insert("cart_size", &0);
+        }
+    }
+}
 
 #[get("/")]
-pub async fn index(conn: DbConn) -> Template {
+pub async fn index(conn: DbConn, customer: OptionCustomer) -> Template {
+    let mut context = Context::new();
+    add_customer_info(&conn, &customer, &mut context).await;
+
     let books = get_books(&conn).await;
     if let Ok(books) = books {
-        let mut context = HashMap::new();
-        context.insert("books", books);
-        Template::render("index", &context)
+        context.insert("books", &books);
+
+        if let SomeCustomer(customer) = customer {
+            let customer_info = get_customer_info(&conn, customer.customer_id).await;
+
+            if let Ok(customer_info) = customer_info {
+                context.insert("customer", &customer_info);
+            }
+        }
+
+        Template::render("index", context.into_json())
     } else {
-        let mut context = HashMap::new();
-        context.insert("error", format!("Could not query books: {:?}", books));
-        Template::render("error", &context)
+        context.insert("error", &format!("Could not query books: {:?}", books));
+        Template::render("error", context.into_json())
     }
 }
 
@@ -58,25 +88,24 @@ pub async fn register_failed(reason: &str) -> Template {
 
 #[get("/customer")]
 pub async fn customer_page(cust: Customer, conn: DbConn) -> Template {
-    let mut context = HashMap::<&str, String>::new();
+    let mut context = Context::new();
 
-    let customer_info = match get_customer_info(&conn, cust.customer_id).await {
+    match get_customer_info(&conn, cust.customer_id.clone()).await {
         Ok(v) => match v {
             Some(v) => v,
             None => {
-                context.insert("error", "Server error: No such customer".to_string());
-                return Template::render("error", &context);
+                context.insert("error", "Server error: No such customer");
+                return Template::render("error", context.into_json());
             }
         },
         Err(e) => {
-            context.insert("error", format!("Server error: {}", e));
-            return Template::render("error", &context);
+            context.insert("error", &format!("Server error: {}", e));
+            return Template::render("error", context.into_json());
         }
     };
 
-    context.insert("name", customer_info.name);
-
-    Template::render("customer", &context)
+    add_customer_info(&conn, &SomeCustomer(cust), &mut context).await;
+    Template::render("customer", context.into_json())
 }
 
 #[get("/owner")]
@@ -182,31 +211,102 @@ pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redire
 }
 
 #[get("/book/<isbn>")]
-pub async fn book(conn: DbConn, isbn: &str) -> Template {
+pub async fn book(conn: DbConn, isbn: &str, customer: OptionCustomer) -> Template {
+    let mut context = Context::new();
+    add_customer_info(&conn, &customer, &mut context).await;
+
     match isbn.parse::<i32>() {
         Ok(isbn) => {
             let books = get_books(&conn).await;
 
             match books {
                 Ok(books) => match books.iter().find(|book| book.isbn == isbn) {
-                    Some(book) => Template::render("book", &book),
+                    Some(book) => {
+                        context.insert("book", &book);
+                        Template::render("book", context.into_json())
+                    }
                     None => {
-                        let mut context = HashMap::new();
-                        context.insert("error", format!("No book with ISBN {}", isbn));
-                        Template::render("error", &context)
+                        context.insert("error", &format!("No book with ISBN {}", isbn));
+                        Template::render("error", context.into_json())
                     }
                 },
                 Err(e) => {
-                    let mut context = HashMap::new();
-                    context.insert("error", format!("{}", e));
-                    Template::render("error", &context)
+                    context.insert("error", &format!("{}", e));
+                    Template::render("error", context.into_json())
                 }
             }
         }
         Err(_) => {
-            let mut context = HashMap::new();
-            context.insert("error", format!("ISBN {} is not a valid ISBN", isbn));
-            Template::render("error", &context)
+            context.insert("error", &format!("ISBN {} is not a valid ISBN", isbn));
+            Template::render("error", context.into_json())
         }
+    }
+}
+
+#[get("/customer/cart")]
+pub async fn customer_cart_page(conn: DbConn, customer: OptionCustomer) -> Template {
+    let mut context = Context::new();
+    add_customer_info(&conn, &customer, &mut context).await;
+
+    use schema::entities::Book;
+
+    match customer {
+        SomeCustomer(customer) => match get_customer_cart(&conn, customer.customer_id).await {
+            Ok(cart) => match get_books(&conn).await {
+                Ok(books) => {
+                    context.insert("cart", &cart);
+
+                    let isbns: Vec<ISBN> = cart.iter().map(|c| c.0).collect();
+                    let quantities: HashMap<ISBN, i32> = cart.iter().map(|p| p.clone()).collect();
+
+                    #[derive(serde::Serialize)]
+                    struct BookWithQuantity {
+                        book: Book,
+                        quantity: i32,
+                    }
+
+                    let books: Vec<BookWithQuantity> = books
+                        .into_iter()
+                        .filter(|b| isbns.contains(&b.isbn))
+                        .map(|b| BookWithQuantity {
+                            book: b.clone(),
+                            quantity: *quantities.get(&b.isbn).unwrap(),
+                        })
+                        .collect();
+
+                    context.insert("books", &books);
+                    Template::render("customer_cart", context.into_json())
+                }
+                Err(e) => {
+                    context.insert("error", &format!("Error fetching books: {}", e));
+                    Template::render("error", context.into_json())
+                }
+            },
+            Err(_) => {
+                context.insert(
+                    "error",
+                    &format!("Could not fetch cart for {}", customer.customer_id),
+                );
+                Template::render("error", context.into_json())
+            }
+        },
+        NoCustomer => {
+            context.insert("error", "Please login to see your cart.");
+            Template::render("error", context.into_json())
+        }
+    }
+}
+
+#[put("/customer/cart/add/<isbn>")]
+pub async fn customer_cart_add(conn: DbConn, customer: Customer, isbn: ISBN) -> Status {
+    let result: Result<(), postgres::error::Error> = try {
+        add_to_cart(&conn, customer.customer_id, isbn).await?;
+
+        ()
+    };
+
+    match result {
+        Ok(_) => Status::Ok,
+        Err(_) => Status::InternalServerError,
     }
 }

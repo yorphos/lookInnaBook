@@ -4,14 +4,13 @@
     <link rel="stylesheet" href="style/customer.css" />
 {% endblock head %}
 
-{% block header %}
-<a href="/">Home</a>
-{% endblock header %}
+{% block customer_nav %}
+{% endblock customer_nav %}
 
 {% block content %}
 
 <h1>Customer Profile</h1>
 
-Name: {{ name }}
+Name: {{ customer.name }}
 
 {% endblock content %}

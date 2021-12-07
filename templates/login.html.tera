@@ -5,10 +5,8 @@
     <link rel="stylesheet" href="style/login.css" />
 {% endblock head %}
 
-{% block header %}
-<a href="/">Home</a>
-<a href="/register">Register</a>
-{% endblock header %}
+{% block login_nav %}
+{% endblock login_nav %}
 
 {% block content %}
 

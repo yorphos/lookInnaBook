@@ -1,3 +1,4 @@
+#![feature(try_blocks)]
 #[macro_use]
 extern crate rocket;
 
@@ -33,6 +34,8 @@ fn rocket() -> _ {
                 register,
                 register_page,
                 register_failed,
+                customer_cart_page,
+                customer_cart_add,
             ],
         )
         .mount("/style", FileServer::from("style/"))
