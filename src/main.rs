@@ -36,6 +36,7 @@ fn rocket() -> _ {
                 register_failed,
                 customer_cart_page,
                 customer_cart_add,
+                customer_cart_set_quantity,
             ],
         )
         .mount("/style", FileServer::from("style/"))

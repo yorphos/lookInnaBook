@@ -19,13 +19,28 @@
     <h4>{{ book.book.title }}</h4>
     <p>By: {{ book.book.author_name }}</p>
     <p>Quantity: {{ book.quantity }}</p>
+    <p>
+    <input type="number" id="quantity" value="{{ book.quantity }}"></input>
+    <button onclick="
+                    async function task() {
+                        let quantityElement = document.getElementById('quantity');
+                        await fetch(window.location.origin + '/customer/cart/quantity/{{ book.book.isbn }}/' + quantityElement.value,
+                        {
+                        method: 'PUT',
+                        });
+                        window.location.reload();
+                    }
+
+                    task();
+                     ">Set Quantity</button>
+    </p>
     <a href="/book/{{ book.book.isbn }}">See more...</a>
 </div>
 {% endfor %}
 </div>
 {% else %}
 <h1>No Books in Cart</h1>
-<button onclick="history.back()">Go Back!</button>
+<button onclick="window.location.replace(window.location.origin)">Go Back!</button>
 {% endif %}
 
 {% endblock content %}

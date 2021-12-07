@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
 use crate::db::query::{
-    add_to_cart, get_books, get_customer_cart, get_customer_info, try_create_new_customer,
-    validate_customer_login, Expiry,
+    add_to_cart, cart_set_book_quantity, get_books, get_customer_cart, get_customer_info,
+    try_create_new_customer, validate_customer_login, Expiry,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::ISBN;
@@ -299,14 +299,21 @@ pub async fn customer_cart_page(conn: DbConn, customer: Option<Customer>) -> Tem
 
 #[put("/customer/cart/add/<isbn>")]
 pub async fn customer_cart_add(conn: DbConn, customer: Customer, isbn: ISBN) -> Status {
-    let result: Result<(), postgres::error::Error> = try {
-        add_to_cart(&conn, customer.customer_id, isbn).await?;
-
-        ()
-    };
-
-    match result {
+    match add_to_cart(&conn, customer.customer_id, isbn).await {
         Ok(_) => Status::Ok,
         Err(_) => Status::InternalServerError,
+    }
+}
+
+#[put("/customer/cart/quantity/<isbn>/<quantity>")]
+pub async fn customer_cart_set_quantity(
+    conn: DbConn,
+    customer: Customer,
+    isbn: ISBN,
+    quantity: u32,
+) -> Status {
+    match cart_set_book_quantity(&conn, customer.customer_id, isbn, quantity).await {
+        Ok(_) => Status::Ok,
+        Err(e) => Status::InternalServerError,
     }
 }

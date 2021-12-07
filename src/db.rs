@@ -359,4 +359,31 @@ pub mod query {
             }
         }
     }
+
+    pub async fn cart_set_book_quantity(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+        isbn: ISBN,
+        quantity: u32,
+    ) -> Result<(), postgres::error::Error> {
+        let quantity = u32::max(quantity, 0) as i32;
+        if quantity == 0 {
+            conn.run(move |c| {
+                c.execute(
+                    "DELETE FROM base.in_cart WHERE isbn = $1 AND customer_id = $2;",
+                    &[&isbn, &customer_id],
+                )
+            })
+            .await?;
+        } else {
+            conn.run(move |c| {
+                c.execute(
+                    "UPDATE base.in_cart SET quantity = $1 WHERE isbn = $2 AND customer_id = $3;",
+                    &[&quantity, &isbn, &customer_id],
+                )
+            })
+            .await?;
+        }
+        Ok(())
+    }
 }
