@@ -29,6 +29,20 @@
                                 {% endif %}
                             </a>
                             {% endblock cart_nav %}
+                            {% block logout_nav %}
+                            <button class="btn-link" onclick="
+                                            async function task() {
+                                                await fetch(window.location.origin + '/account/logout',
+                                                {
+                                                method: 'POST',
+                                                });
+
+                                                window.location.replace(window.location.origin);
+                                            }
+
+                                            task();
+                                             ">Logout</button>
+                            {% endblock logout_nav %}
                         {% else %}
                             {% block login_nav %}
                             <a href="/login">Login</a>

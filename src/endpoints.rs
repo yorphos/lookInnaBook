@@ -317,3 +317,14 @@ pub async fn customer_cart_set_quantity(
         Err(e) => Status::InternalServerError,
     }
 }
+
+#[post("/account/logout")]
+pub async fn account_logout(
+    cookies: &CookieJar<'_>,
+    session_tokens: &State<SessionTokenState>,
+) -> () {
+    let mut session_tokens = session_tokens.lock().await;
+    if let Some(cookie) = cookies.get_private(CUST_SESSION_COOKIE_NAME) {
+        session_tokens.remove(cookie.value());
+    }
+}

@@ -32,3 +32,19 @@ body {
     margin-left: 5px;
     margin-bottom: 10px;
 }
+
+.btn-link {
+    margin-top: 10px;
+    margin-right: 5px;
+    margin-left: 5px;
+    margin-bottom: 10px;
+    border: none;
+    outline: none;
+    background: none;
+    cursor: pointer;
+    color: #FFF;
+    padding: 0;
+    text-decoration: underline;
+    font-family: inherit;
+    font-size: inherit;
+}
