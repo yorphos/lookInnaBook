@@ -18,10 +18,10 @@ use rocket::State;
 use rocket_dyn_templates::tera::Context;
 use rocket_dyn_templates::Template;
 
-use crate::{request_guards::OptionCustomer::*, request_guards::*, SessionTokenState};
+use crate::{request_guards::*, SessionTokenState};
 
-async fn add_customer_info(conn: &DbConn, customer: &OptionCustomer, context: &mut Context) {
-    if let SomeCustomer(customer) = customer {
+async fn add_customer_info(conn: &DbConn, customer: &Option<Customer>, context: &mut Context) {
+    if let Some(customer) = customer {
         if let Ok(customer_info) = get_customer_info(&conn, customer.customer_id).await {
             context.insert("customer", &customer_info);
         } else {
@@ -37,7 +37,7 @@ async fn add_customer_info(conn: &DbConn, customer: &OptionCustomer, context: &m
 }
 
 #[get("/")]
-pub async fn index(conn: DbConn, customer: OptionCustomer) -> Template {
+pub async fn index(conn: DbConn, customer: Option<Customer>) -> Template {
     let mut context = Context::new();
     add_customer_info(&conn, &customer, &mut context).await;
 
@@ -45,7 +45,7 @@ pub async fn index(conn: DbConn, customer: OptionCustomer) -> Template {
     if let Ok(books) = books {
         context.insert("books", &books);
 
-        if let SomeCustomer(customer) = customer {
+        if let Some(customer) = customer {
             let customer_info = get_customer_info(&conn, customer.customer_id).await;
 
             if let Ok(customer_info) = customer_info {
@@ -104,7 +104,7 @@ pub async fn customer_page(cust: Customer, conn: DbConn) -> Template {
         }
     };
 
-    add_customer_info(&conn, &SomeCustomer(cust), &mut context).await;
+    add_customer_info(&conn, &Some(cust), &mut context).await;
     Template::render("customer", context.into_json())
 }
 
@@ -211,7 +211,7 @@ pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redire
 }
 
 #[get("/book/<isbn>")]
-pub async fn book(conn: DbConn, isbn: &str, customer: OptionCustomer) -> Template {
+pub async fn book(conn: DbConn, isbn: &str, customer: Option<Customer>) -> Template {
     let mut context = Context::new();
     add_customer_info(&conn, &customer, &mut context).await;
 
@@ -244,14 +244,14 @@ pub async fn book(conn: DbConn, isbn: &str, customer: OptionCustomer) -> Templat
 }
 
 #[get("/customer/cart")]
-pub async fn customer_cart_page(conn: DbConn, customer: OptionCustomer) -> Template {
+pub async fn customer_cart_page(conn: DbConn, customer: Option<Customer>) -> Template {
     let mut context = Context::new();
     add_customer_info(&conn, &customer, &mut context).await;
 
     use schema::entities::Book;
 
     match customer {
-        SomeCustomer(customer) => match get_customer_cart(&conn, customer.customer_id).await {
+        Some(customer) => match get_customer_cart(&conn, customer.customer_id).await {
             Ok(cart) => match get_books(&conn).await {
                 Ok(books) => {
                     context.insert("cart", &cart);
@@ -290,7 +290,7 @@ pub async fn customer_cart_page(conn: DbConn, customer: OptionCustomer) -> Templ
                 Template::render("error", context.into_json())
             }
         },
-        NoCustomer => {
+        None => {
             context.insert("error", "Please login to see your cart.");
             Template::render("error", context.into_json())
         }
