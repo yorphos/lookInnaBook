@@ -15,10 +15,17 @@ body {
 
 .header-container > header > nav {
     display: flex;
+    justify-content: space-between;
+    flex-flow: row;
+    width: 100%;
+}
+
+.header-container > header > nav > div {
+    display: flex;
     flex-flow: row;
 }
 
-.header-container > header > nav > a {
+.header-container > header > nav > div > a {
     color: #FFF;
     margin-top: 10px;
     margin-right: 5px;

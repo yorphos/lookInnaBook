@@ -10,30 +10,34 @@
         <header>
             <nav>
                 {% block header %}
-                    {% block home_nav %}
-                    <a href="/">Home</a>
-                    {% endblock home_nav %}
-                    {% if customer %}
-                        {% block customer_nav %}
-                        <a href="/customer">Customer</a>
-                        {% endblock customer_nav %}
-                        {% block cart_nav %}
-                        <a href="/customer/cart">
-                            {% if cart_size > 0 %}
-                            Cart({{ cart_size }})
-                            {% else %}
-                            Cart
-                            {% endif %}
-                        </a>
-                        {% endblock cart_nav %}
-                    {% else %}
-                        {% block login_nav %}
-                        <a href="/login">Login</a>
-                        {% endblock login_nav %}
-                        {% block register_nav %}
-                        <a href="/register">Register</a>
-                        {% endblock register_nav %}
-                    {% endif %}
+                    <div>
+                        {% block home_nav %}
+                        <a href="/">Home</a>
+                        {% endblock home_nav %}
+                    </div>
+                    <div>
+                        {% if customer %}
+                            {% block customer_nav %}
+                            <a href="/customer">Customer</a>
+                            {% endblock customer_nav %}
+                            {% block cart_nav %}
+                            <a href="/customer/cart">
+                                {% if cart_size > 0 %}
+                                Cart({{ cart_size }})
+                                {% else %}
+                                Cart
+                                {% endif %}
+                            </a>
+                            {% endblock cart_nav %}
+                        {% else %}
+                            {% block login_nav %}
+                            <a href="/login">Login</a>
+                            {% endblock login_nav %}
+                            {% block register_nav %}
+                            <a href="/register">Register</a>
+                            {% endblock register_nav %}
+                        {% endif %}
+                    </div>
                 {% endblock header %}
             </nav>
         </header>
