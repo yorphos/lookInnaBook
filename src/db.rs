@@ -296,18 +296,22 @@ pub mod query {
                 )
             })
             .await?
-            .map(|row| crate::schema::joined::Customer {
-                name: row.get("name"),
-                email: row.get("email"),
-                street_address: row.get("def_street_address"),
-                postal_code: row.get("def_postal"),
-                province: row.get("def_province"),
-                expiry: row.get("expiry"),
-                name_on_card: row.get("name_on_card"),
-                billing_street_address: row.get("bill_street_address"),
-                billing_postal_code: row.get("bill_postal"),
-                billing_province: row.get("bill_province"),
-            }))
+           .map(|row| {
+               use crate::schema::joined::Customer;
+            let result: Result<Customer, postgres::error::Error> = try { Customer {
+                            name: row.try_get("name")?,
+                            email: row.try_get("email")?,
+                            street_address: row.try_get("def_street_address")?,
+                            postal_code: row.try_get("def_postal")?,
+                            province: row.try_get("def_province")?,
+                            expiry: row.try_get("expiry")?,
+                            name_on_card: row.try_get("name_on_card")?,
+                            billing_street_address: row.try_get("bill_street_address")?,
+                            billing_postal_code: row.try_get("bill_postal")?,
+                            billing_province: row.try_get("bill_province")?,
+            }};
+               result.ok()
+           }).flatten())
     }
 
     pub async fn get_customer_cart(
@@ -323,7 +327,11 @@ pub mod query {
             })
             .await?
             .iter()
-            .map(|row| (row.get("isbn"), row.get("quantity")))
+            .filter_map(|row| {
+                let result: Result<(ISBN, i32), postgres::error::Error> =
+                    try { (row.try_get("isbn")?, row.try_get("quantity")?) };
+                result.ok()
+            })
             .collect())
     }
 

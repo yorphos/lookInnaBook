@@ -11,6 +11,7 @@
 <p>Genre: {{ book.genre }}</p>
 <p>Pages: {{ book.num_pages }}</p>
 <p>Price: {{ book.price }}</p>
+<p>Stock: {{ book.stock }}</p>
 {% if customer %}
 <p><button onclick=
            "

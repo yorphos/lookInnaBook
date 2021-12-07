@@ -18,6 +18,7 @@ pub mod entities {
         pub price: PostgresNumeric,
         pub author_royalties: PostgresNumeric,
         pub reorder_threshold: PostgresInt,
+        pub stock: PostgresInt,
     }
 
     impl Book {
@@ -31,6 +32,7 @@ pub mod entities {
             price: PostgresNumeric,
             author_royalties: PostgresNumeric,
             reorder_threshold: PostgresInt,
+            stock: PostgresInt,
         ) -> Book {
             Book {
                 isbn,
@@ -42,6 +44,7 @@ pub mod entities {
                 price,
                 author_royalties,
                 reorder_threshold,
+                stock,
             }
         }
 
@@ -56,6 +59,7 @@ pub mod entities {
                 row.try_get("price")?,
                 row.try_get("author_royalties")?,
                 row.try_get("reorder_threshold")?,
+                row.try_get("stock")?,
             ))
         }
     }
