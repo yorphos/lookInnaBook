@@ -176,8 +176,13 @@ pub mod query {
     use crate::db::error::CredentialError;
     use crate::schema;
     use crate::schema::entities::*;
+    use crate::schema::joined::Order;
+    use crate::schema::joined::OrderNoBooks;
     use crate::schema::no_id;
+    use crate::schema::no_id::Address;
+    use crate::schema::no_id::PaymentInfo;
     use chrono::Local;
+    use chrono::NaiveDate;
     use rand::RngCore;
     use serde::Serialize;
 
@@ -697,8 +702,13 @@ pub mod query {
         address: Option<schema::no_id::Address>,
         payment_info: Option<schema::no_id::PaymentInfo>,
     ) -> Result<(), OrderError> {
-        for (isbn, quantity) in books {
-            if !check_enough_stock(conn, isbn, quantity).await? {
+        let books: Vec<(ISBN, PostgresInt)> = books
+            .into_iter()
+            .map(|(isbn, quantity)| (isbn, quantity as i32))
+            .collect();
+        for (isbn, quantity) in books.iter() {
+            let quantity = i32::max(*quantity, 0) as u32;
+            if !check_enough_stock(conn, *isbn, quantity).await? {
                 Err(NotEnoughStockError::new())?;
             }
         }
@@ -731,19 +741,184 @@ pub mod query {
 
         let tracking_number = get_tracking_number();
 
-        conn.run(move |c| {
-            c.execute(
+        let order_id: PostgresInt = conn.run(move |c| {
+            c.query_one(
                 "
                 INSERT INTO base.orders
                 (customer_id, shipping_address_id, tracking_number, order_status, order_date, payment_info_id)
                 VALUES
                 ($1, $2, $3, $4, $5, $6)
+                RETURNING order_id;
                 ",
                 &[&customer_id, &address_id, &tracking_number, &"PR", &Local::today().naive_local(), &payment_info_id],
+            )
+        })
+        .await?.try_get("order_id")?;
+
+        for (isbn, quantity) in books {
+            conn.run(move |c| {
+                c.execute(
+                    "
+                    INSERT INTO base.in_order
+                    VALUES ($1, $2, $3);
+                    ",
+                    &[&isbn, &order_id, &quantity],
+                )
+            })
+            .await?;
+        }
+
+        conn.run(move |c| {
+            c.execute(
+                "DELETE FROM base.in_cart WHERE customer_id = $1",
+                &[&customer_id],
             )
         })
         .await?;
 
         Ok(())
+    }
+
+    pub async fn get_books_for_order(
+        conn: &DbConn,
+        order: OrderNoBooks,
+    ) -> Result<Order, postgres::error::Error> {
+        let books = conn.run(move |c| {
+            c.query("SELECT * FROM base.in_order INNER JOIN base.book ON base.in_order.isbn = base.book.isbn WHERE order_id = $1;", &[&order.order_id])
+        }).await?.iter().flat_map(|row| {
+            let result: Result<(Book, u32), OrderError> = try {
+                let quantity: i32 = row.try_get("quantity")?;
+                (Book::from_row(row)?, i32::max(quantity, 0) as u32)
+            };
+
+            result.ok()
+        }).collect();
+
+        Ok(Order::from_order_with_id(order, books))
+    }
+
+    pub async fn get_order_info(
+        conn: &DbConn,
+        order_id: PostgresInt,
+    ) -> Result<OrderNoBooks, OrderError> {
+        let row = conn.run(move |c| c.query_one(
+            "
+            SELECT
+            order_id,
+            add.street_address,
+            add.postal_code,
+            add.province,
+            bill.street_address AS bill_street_address,
+            bill.postal_code AS bill_postal_code,
+            bill.province AS bill_province,
+            order_status,
+            order_date,
+            tracking_number,
+            name_on_card,
+            card_number,
+            expiry,
+            cvv
+            FROM
+            base.orders AS orders
+            INNER JOIN base.address AS add ON orders.shipping_address_id = add.address_id
+            INNER JOIN base.payment_info AS payment ON orders.payment_info_id = payment.payment_info_id
+            INNER JOIN base.address AS bill ON payment.billing_address_id = bill.address_id
+            WHERE order_id = $1;
+            ",
+            &[&order_id])).await?;
+
+        let address = Address::new::<&str>(
+            row.try_get("street_address")?,
+            row.try_get("postal_code")?,
+            row.try_get("province")?,
+        );
+        let billing_address = Address::new::<&str>(
+            row.try_get("bill_street_address")?,
+            row.try_get("bill_postal_code")?,
+            row.try_get("bill_province")?,
+        );
+        let expiry = Expiry::from_str::<&str>(row.try_get("expiry")?)
+            .ok_or(StateError::new("Invalid expiry"))?;
+        let payment_info = PaymentInfo::new::<&str>(
+            row.try_get("name_on_card")?,
+            expiry,
+            row.try_get("card_number")?,
+            row.try_get("cvv")?,
+            billing_address,
+        );
+
+        let date: NaiveDate = row.try_get("order_date")?;
+
+        let order = OrderNoBooks {
+            order_id: row.try_get("order_id")?,
+            shipping_address: address,
+            tracking_number: row.try_get("tracking_number")?,
+            order_status: row.try_get("order_status")?,
+            order_date: date.to_string(),
+            payment_info,
+        };
+
+        Ok(order)
+    }
+
+    pub async fn get_customer_orders_info(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+    ) -> Result<Vec<schema::joined::Order>, postgres::error::Error> {
+        let orders_no_books: Vec<OrderNoBooks> = conn.run(move |c| c.query(
+            "
+            SELECT
+            order_id,
+            add.street_address,
+            add.postal_code,
+            add.province,
+            bill.street_address AS bill_street_address,
+            bill.postal_code AS bill_postal_code,
+            bill.province AS bill_province,
+            order_status,
+            order_date,
+            tracking_number,
+            name_on_card,
+            card_number,
+            expiry,
+            cvv
+            FROM
+            base.orders AS orders
+            INNER JOIN base.address AS add ON orders.shipping_address_id = add.address_id
+            INNER JOIN base.payment_info AS payment ON orders.payment_info_id = payment.payment_info_id
+            INNER JOIN base.address AS bill ON payment.billing_address_id = bill.address_id
+            WHERE customer_id = $1;
+            ",
+            &[&customer_id])).await?.iter()
+           .filter_map(
+            |row| {
+                let result: Result<OrderNoBooks, OrderError> = try {
+                    let address = Address::new::<&str>(row.try_get("street_address")?, row.try_get("postal_code")?, row.try_get("province")?);
+                    let billing_address = Address::new::<&str>(row.try_get("bill_street_address")?, row.try_get("bill_postal_code")?, row.try_get("bill_province")?);
+                    let expiry = Expiry::from_str::<&str>(row.try_get("expiry")?).ok_or(StateError::new("Invalid expiry"))?;
+                    let payment_info = PaymentInfo::new::<&str>(row.try_get("name_on_card")?, expiry, row.try_get("card_number")?, row.try_get("cvv")?, billing_address);
+
+                    let date: NaiveDate = row.try_get("order_date")?; 
+
+                    OrderNoBooks {
+                        order_id: row.try_get("order_id")?,
+                        shipping_address: address,
+                        tracking_number: row.try_get("tracking_number")?,
+                        order_status: row.try_get("order_status")?,
+                        order_date: date.to_string(),
+                        payment_info,
+                    }
+                };
+
+                result.ok()
+        }).collect();
+
+        let mut orders: Vec<Order> = vec![];
+
+        for order in orders_no_books {
+            orders.push(get_books_for_order(conn, order).await?);
+        }
+
+        Ok(orders)
     }
 }

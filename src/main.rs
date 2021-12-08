@@ -40,6 +40,8 @@ fn rocket() -> _ {
                 account_logout,
                 checkout_page,
                 create_order_req,
+                orders_page,
+                view_order,
             ],
         )
         .mount("/style", FileServer::from("style/"))

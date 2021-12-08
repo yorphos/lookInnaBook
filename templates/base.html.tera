@@ -23,12 +23,15 @@
                             {% block cart_nav %}
                             <a href="/customer/cart">
                                 {% if cart_size > 0 %}
-                                Cart({{ cart_size }})
+                                Cart ({{ cart_size }})
                                 {% else %}
                                 Cart
                                 {% endif %}
                             </a>
                             {% endblock cart_nav %}
+                            {% block order_nav %}
+                            <a href="/order/view">Orders</a>
+                            {% endblock order_nav %}
                             {% block logout_nav %}
                             <button class="btn-link" onclick="
                                             async function task() {

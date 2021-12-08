@@ -3,11 +3,13 @@ use std::collections::HashMap;
 use crate::db::conn::DbConn;
 use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
-    add_to_cart, cart_set_book_quantity, get_books, get_customer_cart, get_customer_info,
-    try_create_new_customer, validate_customer_login, Expiry,
+    add_to_cart, cart_set_book_quantity, get_books, get_books_for_order, get_customer_cart,
+    get_customer_info, get_customer_orders_info, get_order_info, try_create_new_customer,
+    validate_customer_login, Expiry,
 };
 use crate::request_guards::state::SessionType;
-use crate::schema::entities::ISBN;
+use crate::schema::entities::{Book, PostgresInt, ISBN};
+use crate::schema::joined::Order;
 use crate::schema::no_id::{Address, PaymentInfo};
 use crate::schema::{self, no_id};
 use chrono::{Duration, Local};
@@ -19,11 +21,19 @@ use rocket::response::Redirect;
 use rocket::State;
 use rocket_dyn_templates::tera::Context;
 use rocket_dyn_templates::Template;
+use serde::Serialize;
 
 use crate::{request_guards::*, SessionTokenState};
 
-fn render_error_template<T: AsRef<str>>(error: T) -> Template {
+async fn render_error_template<T: AsRef<str>>(
+    error: T,
+    conn: &DbConn,
+    customer: &Option<Customer>,
+) -> Template {
     let mut context = Context::new();
+
+    add_customer_info(conn, customer, &mut context).await;
+
     context.insert("error", error.as_ref());
 
     Template::render("error", context.into_json())
@@ -64,7 +74,12 @@ pub async fn index(conn: DbConn, customer: Option<Customer>) -> Template {
 
         Template::render("index", context.into_json())
     } else {
-        render_error_template(format!("Could not query books: {:?}", books))
+        render_error_template(
+            format!("Could not query books: {:?}", books),
+            &conn,
+            &customer,
+        )
+        .await
     }
 }
 
@@ -75,8 +90,8 @@ pub async fn login_page() -> Template {
 }
 
 #[get("/login/failed/<e>")]
-pub async fn login_failed(e: &str) -> Template {
-    render_error_template(format!("Login failed: {}", e))
+pub async fn login_failed(e: &str, conn: DbConn) -> Template {
+    render_error_template(format!("Login failed: {}", e), &conn, &None).await
 }
 
 #[get("/register")]
@@ -86,8 +101,8 @@ pub async fn register_page() -> Template {
 }
 
 #[get("/register/failed/<reason>")]
-pub async fn register_failed(reason: &str) -> Template {
-    render_error_template(format!("Registration failed: {}", reason))
+pub async fn register_failed(reason: &str, conn: DbConn) -> Template {
+    render_error_template(format!("Registration failed: {}", reason), &conn, &None).await
 }
 
 #[get("/customer")]
@@ -98,11 +113,11 @@ pub async fn customer_page(cust: Customer, conn: DbConn) -> Template {
         Ok(v) => match v {
             Some(v) => v,
             None => {
-                return render_error_template("No such customer");
+                return render_error_template("No such customer", &conn, &None).await;
             }
         },
         Err(e) => {
-            return render_error_template(format!("Server error: {}", e));
+            return render_error_template(format!("Server error: {}", e), &conn, &None).await;
         }
     };
 
@@ -227,12 +242,23 @@ pub async fn book(conn: DbConn, isbn: &str, customer: Option<Customer>) -> Templ
                         context.insert("book", &book);
                         Template::render("book", context.into_json())
                     }
-                    None => render_error_template(format!("No book with ISBN: {}", isbn)),
+                    None => {
+                        render_error_template(
+                            format!("No book with ISBN: {}", isbn),
+                            &conn,
+                            &customer,
+                        )
+                        .await
+                    }
                 },
-                Err(e) => render_error_template(format!("Server error: {}", e)),
+                Err(e) => {
+                    render_error_template(format!("Server error: {}", e), &conn, &customer).await
+                }
             }
         }
-        Err(_) => render_error_template(format!("{} is not a valid ISBN", isbn)),
+        Err(_) => {
+            render_error_template(format!("{} is not a valid ISBN", isbn), &conn, &customer).await
+        }
     }
 }
 
@@ -270,13 +296,25 @@ pub async fn customer_cart_page(conn: DbConn, customer: Option<Customer>) -> Tem
                     context.insert("books", &books);
                     Template::render("customer_cart", context.into_json())
                 }
-                Err(e) => render_error_template(format!("Error fetching books: {}", e)),
+                Err(e) => {
+                    render_error_template(
+                        format!("Error fetching books: {}", e),
+                        &conn,
+                        &Some(customer),
+                    )
+                    .await
+                }
             },
             Err(_) => {
-                render_error_template(format!("Could not fetch cart for {}", customer.customer_id))
+                render_error_template(
+                    format!("Could not fetch cart for {}", customer.customer_id),
+                    &conn,
+                    &Some(customer),
+                )
+                .await
             }
         },
-        None => render_error_template("Please login to see your cart."),
+        None => render_error_template("Please login to see your cart.", &conn, &customer).await,
     }
 }
 
@@ -352,9 +390,18 @@ pub async fn checkout_page(conn: DbConn, customer: Customer) -> Template {
 
                 Template::render("checkout_page", context.into_json())
             }
-            Err(e) => render_error_template(format!("Error fetching books: {}", e)),
+            Err(e) => {
+                render_error_template(
+                    format!("Error fetching books: {}", e),
+                    &conn,
+                    &Some(customer),
+                )
+                .await
+            }
         },
-        Err(e) => render_error_template(format!("Server error: {}", e)),
+        Err(e) => {
+            render_error_template(format!("Server error: {}", e), &conn, &Some(customer)).await
+        }
     }
 }
 
@@ -415,7 +462,129 @@ pub async fn create_order_req(
     };
 
     match result {
-        Ok(_) => render_error_template("Success!"),
-        Err(e) => render_error_template(format!("Order error: {}", e)),
+        Ok(_) => {
+            let context = Context::new();
+            Template::render("order_success", context.into_json())
+        }
+        Err(e) => {
+            render_error_template(format!("Order error: {}", e), &conn, &Some(customer)).await
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct CensoredPaymentInfo {
+    pub name_on_card: String,
+    pub expiry: Expiry,
+    pub censored_card_number: String,
+    pub billing_address: Address,
+}
+
+#[derive(Serialize, Debug)]
+struct BookWithQuantity {
+    book: Book,
+    quantity: u32,
+}
+
+#[derive(Serialize, Debug)]
+struct CensoredOrder {
+    pub order_id: PostgresInt,
+    pub shipping_address: Address,
+    pub tracking_number: String,
+    pub order_status: String,
+    pub order_date: String,
+    pub payment_info: CensoredPaymentInfo,
+    pub books: Vec<BookWithQuantity>,
+}
+
+fn censor_order(order: Order) -> CensoredOrder {
+    let Order {
+        order_id,
+        shipping_address,
+        tracking_number,
+        order_status,
+        order_date,
+        payment_info,
+        books,
+    } = order;
+    let PaymentInfo {
+        name_on_card,
+        expiry,
+        card_number,
+        cvv: _,
+        billing_address,
+    } = payment_info;
+
+    let num_last_digits = usize::min(card_number.len(), 4);
+    let censored_card_number = "*".repeat(12) + &card_number[card_number.len() - num_last_digits..];
+    let censored_payment_info = CensoredPaymentInfo {
+        name_on_card,
+        expiry,
+        censored_card_number,
+        billing_address,
+    };
+
+    let books = books
+        .into_iter()
+        .map(|(book, quantity)| BookWithQuantity { book, quantity })
+        .collect();
+
+    CensoredOrder {
+        order_id,
+        shipping_address,
+        tracking_number,
+        order_status,
+        order_date,
+        payment_info: censored_payment_info,
+        books,
+    }
+}
+
+fn add_orders_to_context(orders: Vec<Order>, context: &mut Context) {
+    let orders: Vec<CensoredOrder> = orders.into_iter().map(censor_order).collect();
+
+    context.insert("orders", &orders);
+}
+
+#[get("/order/view")]
+pub async fn orders_page(conn: DbConn, customer: Customer) -> Template {
+    let mut context = Context::new();
+
+    let customer_id = customer.customer_id;
+
+    add_customer_info(&conn, &Some(customer), &mut context).await;
+
+    match get_customer_orders_info(&conn, customer_id).await {
+        Ok(orders) => {
+            context.insert("num_orders", &orders.len());
+            add_orders_to_context(orders, &mut context);
+            Template::render("orders", context.into_json())
+        }
+        Err(e) => {
+            render_error_template(format!("Server error: {}", e), &conn, &Some(customer)).await
+        }
+    }
+}
+
+#[get("/order/view/<order_id>")]
+pub async fn view_order(conn: DbConn, customer: Customer, order_id: i32) -> Template {
+    let mut context = Context::new();
+
+    add_customer_info(&conn, &Some(customer), &mut context).await;
+
+    match get_order_info(&conn, order_id).await {
+        Ok(order_info) => match get_books_for_order(&conn, order_info).await {
+            Ok(order) => {
+                let censored_order = censor_order(order);
+                context.insert("order", &censored_order);
+                Template::render("order", context.into_json())
+            }
+            Err(e) => {
+                render_error_template(format!("Server error: {}", e), &conn, &Some(customer)).await
+            }
+        },
+        Err(e) => {
+            render_error_template(format!("Server error: {}", e), &conn, &Some(customer)).await
+        }
     }
 }

@@ -1,0 +1,32 @@
+{% extends "base" %}
+
+{% block head %}
+<link rel="stylesheet" href="/style/order.css" />
+{% endblock head %}
+
+{% block home_nav %}
+{% endblock home_nav %}
+
+{% block content %}
+
+<h4>{{ order.order_date }}</h4>
+<p>Shipping To: {{ order.shipping_address.street_address }}, {{ order.shipping_address.postal_code }}, {{ order.shipping_address.province }}</p>
+<p>Paid With Card: {{ order.payment_info.censored_card_number }}</p>
+<p>Order Status: {{ order.order_status }}</p>
+<p>Tracking Number: {{ order.tracking_number }}</p>
+
+<div class="books">
+{% for book in order.books %}
+<div class="book">
+    <a href="/book/{{ book.book.isbn }}">
+    <image src="https://via.placeholder.com/180"></image>
+    </a>
+    <h4>{{ book.book.title }}</h4>
+    <p>By: {{ book.book.author_name }}</p>
+    <p>Quantity: {{ book.quantity }}</p>
+    <a href="/book/{{ book.book.isbn }}">See more...</a>
+</div>
+{% endfor %}
+</div>
+
+{% endblock content %}

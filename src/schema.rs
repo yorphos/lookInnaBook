@@ -76,6 +76,11 @@ pub mod entities {
 pub mod joined {
     use rocket::serde::Serialize;
 
+    use super::{
+        entities::{Book, PostgresInt},
+        no_id::{Address, PaymentInfo},
+    };
+
     #[derive(Serialize, Clone, Debug, Default)]
     pub struct Customer {
         pub name: String,
@@ -89,12 +94,56 @@ pub mod joined {
         pub billing_postal_code: String,
         pub billing_province: String,
     }
+
+    #[derive(Serialize, Clone, Debug)]
+    pub struct OrderNoBooks {
+        pub order_id: PostgresInt,
+        pub shipping_address: Address,
+        pub tracking_number: String,
+        pub order_status: String,
+        pub order_date: String,
+        pub payment_info: PaymentInfo,
+    }
+
+    #[derive(Serialize, Clone, Debug)]
+    pub struct Order {
+        pub order_id: PostgresInt,
+        pub shipping_address: Address,
+        pub tracking_number: String,
+        pub order_status: String,
+        pub order_date: String,
+        pub payment_info: PaymentInfo,
+        pub books: Vec<(Book, u32)>,
+    }
+
+    impl Order {
+        pub fn from_order_with_id(order: OrderNoBooks, books: Vec<(Book, u32)>) -> Order {
+            let OrderNoBooks {
+                order_id,
+                shipping_address,
+                tracking_number,
+                order_status,
+                order_date,
+                payment_info,
+            } = order;
+            Order {
+                order_id,
+                books,
+                shipping_address,
+                tracking_number,
+                order_date,
+                order_status,
+                payment_info,
+            }
+        }
+    }
 }
 
 pub mod no_id {
     use crate::db::query::Expiry;
+    use rocket::serde::Serialize;
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Serialize)]
     pub struct Address {
         pub street_address: String,
         pub postal_code: String,
@@ -111,7 +160,7 @@ pub mod no_id {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug, Serialize)]
     pub struct PaymentInfo {
         pub name_on_card: String,
         pub expiry: Expiry,

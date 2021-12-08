@@ -1,0 +1,15 @@
+@import "header.css";
+
+.books {
+    display: flex;
+    flex-flow: row;
+}
+
+.book {
+    display: flex;
+    flex-flow: column;
+    align-items: center;
+    padding: 1%;
+    border: solid;
+    margin: 1%;
+}

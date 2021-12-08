@@ -20,6 +20,7 @@ pub mod state {
     pub type SessionTokens = HashMap<String, (SessionType, ExpirationTime)>;
 }
 
+#[derive(Clone, Copy)]
 pub struct Customer {
     pub customer_id: PostgresInt,
 }

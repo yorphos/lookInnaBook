@@ -39,11 +39,11 @@
   <ul>
     <li>
         <label for="default-shipping">Default Shipping:</label>
-        <input type="checkbox" id="default-shipping" name="default_shipping" value="true"></input>
+        <input type="checkbox" id="default-shipping" name="default_shipping" checked></input>
     </li>
     <li>
         <label for="default-payment">Default Payment:</label>
-        <input type="checkbox" id="default-payment" name="default_payment" value="true"></input>
+        <input type="checkbox" id="default-payment" name="default_payment" checked></input>
     </li>
     <li>
         <label for="name">Name:</label>

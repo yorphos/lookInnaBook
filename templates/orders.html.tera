@@ -1,0 +1,37 @@
+{% extends "base" %}
+
+{% block head %}
+<link rel="stylesheet" href="/style/orders.css" />
+{% endblock head %}
+
+{% block cart_nav %}
+{% endblock cart_nav %}
+
+{% block error %}
+<div id="error-banner">
+</div>
+{% endblock error %}
+
+{% block content %}
+
+{% if num_orders > 0 %}
+<div class="orders">
+{% for order in orders %}
+<div class="order">
+    <a href="/order/view/{{ order.order_id }}">
+    <h4>{{ order.order_date }}</h4>
+    </a>
+    <p>Shipping To: {{ order.shipping_address.street_address }}, {{ order.shipping_address.postal_code }}, {{ order.shipping_address.province }}</p>
+    <p>Paid With Card: {{ order.payment_info.censored_card_number }}</p>
+    <p>Order Status: {{ order.order_status }}</p>
+    <p>Tracking Number: {{ order.tracking_number }}</p>
+    <p>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<h1>No Orders</h1>
+<button onclick="window.location.replace(window.location.origin)">Go Back!</button>
+{% endif %}
+
+{% endblock content %}
