@@ -21,6 +21,13 @@ use rocket_dyn_templates::Template;
 
 use crate::{request_guards::*, SessionTokenState};
 
+fn render_error_template<T: AsRef<str>>(error: T) -> Template {
+    let mut context = Context::new();
+    context.insert("error", error.as_ref());
+
+    Template::render("error", context.into_json())
+}
+
 async fn add_customer_info(conn: &DbConn, customer: &Option<Customer>, context: &mut Context) {
     if let Some(customer) = customer {
         if let Ok(customer_info) = get_customer_info(&conn, customer.customer_id).await {
@@ -56,8 +63,7 @@ pub async fn index(conn: DbConn, customer: Option<Customer>) -> Template {
 
         Template::render("index", context.into_json())
     } else {
-        context.insert("error", &format!("Could not query books: {:?}", books));
-        Template::render("error", context.into_json())
+        render_error_template(format!("Could not query books: {:?}", books))
     }
 }
 
@@ -69,9 +75,7 @@ pub async fn login_page() -> Template {
 
 #[get("/login/failed/<e>")]
 pub async fn login_failed(e: &str) -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("error", format!("Login Failed: {}", e));
-    Template::render("error", &context)
+    render_error_template(format!("Login failed: {}", e))
 }
 
 #[get("/register")]
@@ -82,9 +86,7 @@ pub async fn register_page() -> Template {
 
 #[get("/register/failed/<reason>")]
 pub async fn register_failed(reason: &str) -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("error", format!("Registration Failed: {}", reason));
-    Template::render("error", &context)
+    render_error_template(format!("Registration failed: {}", reason))
 }
 
 #[get("/customer")]
@@ -95,13 +97,11 @@ pub async fn customer_page(cust: Customer, conn: DbConn) -> Template {
         Ok(v) => match v {
             Some(v) => v,
             None => {
-                context.insert("error", "Server error: No such customer");
-                return Template::render("error", context.into_json());
+                return render_error_template("No such customer");
             }
         },
         Err(e) => {
-            context.insert("error", &format!("Server error: {}", e));
-            return Template::render("error", context.into_json());
+            return render_error_template(format!("Server error: {}", e));
         }
     };
 
@@ -226,21 +226,12 @@ pub async fn book(conn: DbConn, isbn: &str, customer: Option<Customer>) -> Templ
                         context.insert("book", &book);
                         Template::render("book", context.into_json())
                     }
-                    None => {
-                        context.insert("error", &format!("No book with ISBN {}", isbn));
-                        Template::render("error", context.into_json())
-                    }
+                    None => render_error_template(format!("No book with ISBN: {}", isbn)),
                 },
-                Err(e) => {
-                    context.insert("error", &format!("{}", e));
-                    Template::render("error", context.into_json())
-                }
+                Err(e) => render_error_template(format!("Server error: {}", e)),
             }
         }
-        Err(_) => {
-            context.insert("error", &format!("ISBN {} is not a valid ISBN", isbn));
-            Template::render("error", context.into_json())
-        }
+        Err(_) => render_error_template(format!("{} is not a valid ISBN", isbn)),
     }
 }
 
@@ -278,23 +269,13 @@ pub async fn customer_cart_page(conn: DbConn, customer: Option<Customer>) -> Tem
                     context.insert("books", &books);
                     Template::render("customer_cart", context.into_json())
                 }
-                Err(e) => {
-                    context.insert("error", &format!("Error fetching books: {}", e));
-                    Template::render("error", context.into_json())
-                }
+                Err(e) => render_error_template(format!("Error fetching books: {}", e)),
             },
             Err(_) => {
-                context.insert(
-                    "error",
-                    &format!("Could not fetch cart for {}", customer.customer_id),
-                );
-                Template::render("error", context.into_json())
+                render_error_template(format!("Could not fetch cart for {}", customer.customer_id))
             }
         },
-        None => {
-            context.insert("error", "Please login to see your cart.");
-            Template::render("error", context.into_json())
-        }
+        None => render_error_template("Please login to see your cart."),
     }
 }
 
@@ -332,5 +313,19 @@ pub async fn account_logout(
     let mut session_tokens = session_tokens.lock().await;
     if let Some(cookie) = cookies.get_private(CUST_SESSION_COOKIE_NAME) {
         session_tokens.remove(cookie.value());
+    }
+}
+
+#[get("/checkout")]
+pub async fn checkout_page(conn: DbConn, customer: Customer) -> Template {
+    let mut context = Context::new();
+    let customer_id = customer.customer_id;
+
+    add_customer_info(&conn, &Some(customer), &mut context).await;
+    match get_customer_cart(&conn, customer_id).await {
+        Ok(cart) => {
+            todo!()
+        }
+        Err(e) => render_error_template(format!("Server error: {}", e)),
     }
 }
