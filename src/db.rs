@@ -12,6 +12,50 @@ pub mod error {
     use bcrypt::BcryptError;
 
     #[derive(Debug, Clone, Copy)]
+    pub struct NotEnoughStockError {}
+
+    impl NotEnoughStockError {
+        pub fn new() -> NotEnoughStockError {
+            NotEnoughStockError {}
+        }
+    }
+
+    impl Error for NotEnoughStockError {}
+
+    impl Display for NotEnoughStockError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Not enough stock for that operation")
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum CartError {
+        NotEnoughStock(NotEnoughStockError),
+        DBError(postgres::error::Error),
+    }
+
+    impl Display for CartError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::DBError(err) => Display::fmt(&err, f),
+                Self::NotEnoughStock(err) => Display::fmt(&err, f),
+            }
+        }
+    }
+
+    impl From<postgres::error::Error> for CartError {
+        fn from(e: postgres::error::Error) -> Self {
+            CartError::DBError(e)
+        }
+    }
+
+    impl From<NotEnoughStockError> for CartError {
+        fn from(e: NotEnoughStockError) -> Self {
+            CartError::NotEnoughStock(e)
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
     pub struct CredentialError {}
 
     impl CredentialError {
@@ -68,7 +112,9 @@ pub mod error {
 
 pub mod query {
     use super::conn::DbConn;
+    use super::error::CartError;
     use super::error::LoginError;
+    use super::error::NotEnoughStockError;
     use crate::db::error::CredentialError;
     use crate::schema::entities::*;
     use crate::schema::no_id;
@@ -373,8 +419,18 @@ pub mod query {
         customer_id: PostgresInt,
         isbn: ISBN,
         quantity: u32,
-    ) -> Result<(), postgres::error::Error> {
+    ) -> Result<(), CartError> {
+        let stock: PostgresInt = conn
+            .run(move |c| c.query_one("SELECT stock FROM base.book WHERE isbn = $1", &[&isbn]))
+            .await?
+            .try_get("stock")?;
+
         let quantity = u32::max(quantity, 0) as i32;
+
+        if quantity > stock {
+            Err(NotEnoughStockError::new())?;
+        }
+
         if quantity == 0 {
             conn.run(move |c| {
                 c.execute(

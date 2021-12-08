@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
+use crate::db::error::CartError;
 use crate::db::query::{
     add_to_cart, cart_set_book_quantity, get_books, get_customer_cart, get_customer_info,
     try_create_new_customer, validate_customer_login, Expiry,
@@ -311,11 +312,16 @@ pub async fn customer_cart_set_quantity(
     customer: Customer,
     isbn: ISBN,
     quantity: u32,
-) -> Status {
-    match cart_set_book_quantity(&conn, customer.customer_id, isbn, quantity).await {
-        Ok(_) => Status::Ok,
-        Err(e) => Status::InternalServerError,
-    }
+) -> Result<(), rocket::response::status::Custom<String>> {
+    use rocket::response::status;
+    cart_set_book_quantity(&conn, customer.customer_id, isbn, quantity)
+        .await
+        .map_err(|e| match e {
+            CartError::NotEnoughStock(_) => {
+                status::Custom(Status::Conflict, "Insufficient book stock".to_owned())
+            }
+            CartError::DBError(_) => status::Custom(Status::InternalServerError, e.to_string()),
+        })
 }
 
 #[post("/account/logout")]

@@ -7,9 +7,15 @@
 {% block cart_nav %}
 {% endblock cart_nav %}
 
+{% block error %}
+<div id="error-banner">
+</div>
+{% endblock error %}
+
 {% block content %}
 
 {% if cart_size > 0 %}
+<button>Proceed To Checkout</button>
 <div class="cart-books">
 {% for book in books %}
 <div class="cart-book">
@@ -24,11 +30,22 @@
     <button onclick="
                     async function task() {
                         let quantityElement = document.getElementById('quantity');
-                        await fetch(window.location.origin + '/customer/cart/quantity/{{ book.book.isbn }}/' + quantityElement.value,
+                        let response = await fetch(window.location.origin + '/customer/cart/quantity/{{ book.book.isbn }}/' + quantityElement.value,
                         {
                         method: 'PUT',
                         });
-                        window.location.reload();
+                        console.log(response)
+                        if (response.status === 409) {
+                            let errorBanner = document.getElementById('error-banner');
+                            errorBanner.textContent = 'Insufficient book stock';
+                            errorBanner.classList.add('error-banner');
+                        } else if (response.status === 500) {
+                            let errorBanner = document.getElementById('error-banner');
+                            errorBanner.textContent = 'Server experienced internal error';
+                            errorBanner.classList.add('error-banner');
+                        } else {
+                            window.location.reload();
+                        }
                     }
 
                     task();

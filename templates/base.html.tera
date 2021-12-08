@@ -56,6 +56,7 @@
             </nav>
         </header>
     </div>
+    {% block error %}{% endblock error %}
     <div id="content">{% block content %}{% endblock content %}</div>
     <div id="footer">
         {% block footer %}

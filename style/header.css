@@ -48,3 +48,9 @@ body {
     font-family: inherit;
     font-size: inherit;
 }
+
+.error-banner {
+    border: solid red;
+    background-color: #ed6b61;
+    text-align: center;
+}
