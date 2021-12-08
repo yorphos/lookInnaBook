@@ -15,7 +15,6 @@
 {% block content %}
 
 {% if cart_size > 0 %}
-<button>Proceed To Checkout</button>
 <div class="cart-books">
 {% for book in books %}
 <div class="cart-book">
@@ -55,6 +54,7 @@
 </div>
 {% endfor %}
 </div>
+<a href="/checkout">Proceed To Checkout</a>
 {% else %}
 <h1>No Books in Cart</h1>
 <button onclick="window.location.replace(window.location.origin)">Go Back!</button>

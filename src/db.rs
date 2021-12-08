@@ -11,6 +11,27 @@ pub mod error {
 
     use bcrypt::BcryptError;
 
+    #[derive(Debug, Clone)]
+    pub struct StateError {
+        what: String,
+    }
+
+    impl StateError {
+        pub fn new<T: AsRef<str>>(what: T) -> StateError {
+            StateError {
+                what: what.as_ref().to_owned(),
+            }
+        }
+    }
+
+    impl Error for StateError {}
+
+    impl Display for StateError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Invalid application state: {}", self.what)
+        }
+    }
+
     #[derive(Debug, Clone, Copy)]
     pub struct NotEnoughStockError {}
 
@@ -52,6 +73,41 @@ pub mod error {
     impl From<NotEnoughStockError> for CartError {
         fn from(e: NotEnoughStockError) -> Self {
             CartError::NotEnoughStock(e)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum OrderError {
+        NotEnoughStock(NotEnoughStockError),
+        DBError(postgres::error::Error),
+        StateError(StateError),
+    }
+
+    impl Display for OrderError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::DBError(err) => Display::fmt(&err, f),
+                Self::NotEnoughStock(err) => Display::fmt(&err, f),
+                Self::StateError(err) => Display::fmt(&err, f),
+            }
+        }
+    }
+
+    impl From<postgres::error::Error> for OrderError {
+        fn from(e: postgres::error::Error) -> Self {
+            Self::DBError(e)
+        }
+    }
+
+    impl From<NotEnoughStockError> for OrderError {
+        fn from(e: NotEnoughStockError) -> Self {
+            Self::NotEnoughStock(e)
+        }
+    }
+
+    impl From<StateError> for OrderError {
+        fn from(e: StateError) -> Self {
+            Self::StateError(e)
         }
     }
 
@@ -115,9 +171,14 @@ pub mod query {
     use super::error::CartError;
     use super::error::LoginError;
     use super::error::NotEnoughStockError;
+    use super::error::OrderError;
+    use super::error::StateError;
     use crate::db::error::CredentialError;
+    use crate::schema;
     use crate::schema::entities::*;
     use crate::schema::no_id;
+    use chrono::Local;
+    use rand::RngCore;
     use serde::Serialize;
 
     pub async fn get_books(conn: &DbConn) -> Result<Vec<Book>, postgres::error::Error> {
@@ -311,6 +372,31 @@ pub mod query {
         }
     }
 
+    pub async fn get_customer(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+    ) -> Result<Option<crate::schema::entities::Customer>, postgres::error::Error> {
+        let row = conn
+            .run(move |c| {
+                c.query_opt(
+                    "SELECT name, email, default_shipping_address, default_payment_info_id
+            FROM base.customer WHERE customer_id = $1",
+                    &[&customer_id],
+                )
+            })
+            .await?;
+
+        Ok(match row {
+            Some(row) => Some(schema::entities::Customer {
+                name: row.try_get("name")?,
+                email: row.try_get("email")?,
+                default_shipping_address_id: row.try_get("default_shipping_address")?,
+                default_payment_info_id: row.try_get("default_payment_info_id")?,
+            }),
+            None => None,
+        })
+    }
+
     pub async fn get_customer_info(
         conn: &DbConn,
         customer_id: PostgresInt,
@@ -363,7 +449,7 @@ pub mod query {
     pub async fn get_customer_cart(
         conn: &DbConn,
         customer_id: PostgresInt,
-    ) -> Result<Vec<(ISBN, i32)>, postgres::error::Error> {
+    ) -> Result<Vec<(ISBN, u32)>, postgres::error::Error> {
         Ok(conn
             .run(move |c| {
                 c.query(
@@ -378,6 +464,7 @@ pub mod query {
                     try { (row.try_get("isbn")?, row.try_get("quantity")?) };
                 result.ok()
             })
+            .map(|b| (b.0, i32::max(b.1, 0) as u32))
             .collect())
     }
 
@@ -414,20 +501,27 @@ pub mod query {
         }
     }
 
-    pub async fn cart_set_book_quantity(
+    async fn check_enough_stock(
         conn: &DbConn,
-        customer_id: PostgresInt,
         isbn: ISBN,
         quantity: u32,
-    ) -> Result<(), CartError> {
+    ) -> Result<bool, postgres::error::Error> {
         let stock: PostgresInt = conn
             .run(move |c| c.query_one("SELECT stock FROM base.book WHERE isbn = $1", &[&isbn]))
             .await?
             .try_get("stock")?;
 
         let quantity = u32::max(quantity, 0) as i32;
+        Ok(quantity < stock)
+    }
 
-        if quantity > stock {
+    pub async fn cart_set_book_quantity(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+        isbn: ISBN,
+        quantity: u32,
+    ) -> Result<(), CartError> {
+        if !check_enough_stock(conn, isbn, quantity).await? {
             Err(NotEnoughStockError::new())?;
         }
 
@@ -448,6 +542,208 @@ pub mod query {
             })
             .await?;
         }
+        Ok(())
+    }
+
+    async fn find_address(
+        conn: &DbConn,
+        address: schema::no_id::Address,
+    ) -> Result<Option<PostgresInt>, postgres::error::Error> {
+        let schema::no_id::Address {
+            street_address,
+            postal_code,
+            province,
+        } = address;
+
+        let row = conn.run(move |c| {
+            c.query_opt("SELECT address_id FROM base.address WHERE street_address = $1 AND postal_code = $2 AND province = $3", &[&street_address, &postal_code, &province])
+        }).await?;
+
+        match row {
+            Some(row) => Ok(row.try_get("address_id")?),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_payment_info(
+        conn: &DbConn,
+        payment_info: schema::no_id::PaymentInfo,
+    ) -> Result<Option<PostgresInt>, postgres::error::Error> {
+        let schema::no_id::PaymentInfo {
+            card_number,
+            name_on_card,
+            expiry,
+            cvv,
+            billing_address,
+        } = payment_info;
+
+        let schema::no_id::Address {
+            street_address,
+            postal_code,
+            province,
+        } = billing_address;
+
+        let row = conn
+            .run(move |c| {
+                c.query_opt(
+                    "
+                SELECT payment_info_id FROM
+                base.payment_info INNER JOIN
+                base.address ON billing_address_id = address_id WHERE
+                name_on_card = $1 AND
+                expiry = $2 AND
+                card_number = $3 AND 
+                cvv = $4 AND
+                street_address = $5 AND
+                postal_code = $6 AND
+                province = $7;
+                ",
+                    &[
+                        &name_on_card,
+                        &expiry.to_string(),
+                        &card_number,
+                        &cvv,
+                        &street_address,
+                        &postal_code,
+                        &province,
+                    ],
+                )
+            })
+            .await?;
+
+        Ok(match row {
+            Some(row) => Some(row.try_get("payment_info_id")?),
+            None => None,
+        })
+    }
+
+    async fn get_or_insert_address(
+        conn: &DbConn,
+        address: schema::no_id::Address,
+    ) -> Result<PostgresInt, postgres::error::Error> {
+        match find_address(conn, address.clone()).await? {
+            Some(address_id) => Ok(address_id),
+            None => {
+                let schema::no_id::Address {
+                    street_address,
+                    postal_code,
+                    province,
+                } = address;
+
+                Ok(conn
+                    .run(move |c| {
+                        c.query_one(
+                            "INSERT INTO base.address
+                    (street_address, postal_code, province)
+                    VALUES ($1, $2, $3)
+                    RETURNING address_id;",
+                            &[&street_address, &postal_code, &province],
+                        )
+                    })
+                    .await?
+                    .try_get("address_id")?)
+            }
+        }
+    }
+
+    async fn get_or_insert_payment_info(
+        conn: &DbConn,
+        payment_info: schema::no_id::PaymentInfo,
+    ) -> Result<PostgresInt, postgres::error::Error> {
+        match find_payment_info(conn, payment_info.clone()).await? {
+            Some(payment_info_id) => Ok(payment_info_id),
+            None => {
+                let schema::no_id::PaymentInfo {
+                    card_number,
+                    name_on_card,
+                    expiry,
+                    cvv,
+                    billing_address,
+                } = payment_info;
+
+                let address_id = get_or_insert_address(conn, billing_address).await?;
+
+                Ok(conn
+                    .run(move |c| {
+                        c.query_one(
+                            "INSERT INTO base.payment_info
+                    (name_on_card, expiry, card_number, cvv, billing_address_id)
+                    VALUES ($1, $2, $3, $4)
+                    RETURNING payment_info_id;",
+                            &[
+                                &name_on_card,
+                                &expiry.to_string(),
+                                &card_number,
+                                &cvv,
+                                &address_id,
+                            ],
+                        )
+                    })
+                    .await?
+                    .try_get("payment_info_id")?)
+            }
+        }
+    }
+
+    fn get_tracking_number() -> String {
+        let mut rng = rand::thread_rng();
+        rng.next_u32().to_string()
+    }
+
+    pub async fn create_order(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+        books: Vec<(ISBN, u32)>,
+        address: Option<schema::no_id::Address>,
+        payment_info: Option<schema::no_id::PaymentInfo>,
+    ) -> Result<(), OrderError> {
+        for (isbn, quantity) in books {
+            if !check_enough_stock(conn, isbn, quantity).await? {
+                Err(NotEnoughStockError::new())?;
+            }
+        }
+
+        let address_id = match address {
+            Some(address) => get_or_insert_address(conn, address).await?,
+            None => {
+                let customer = get_customer(conn, customer_id).await?;
+                customer
+                    .ok_or(StateError::new(format!(
+                        "No customer with the ID ({})",
+                        customer_id
+                    )))?
+                    .default_shipping_address_id
+            }
+        };
+
+        let payment_info_id = match payment_info {
+            Some(payment_info) => get_or_insert_payment_info(conn, payment_info).await?,
+            None => {
+                let customer = get_customer(conn, customer_id).await?;
+                customer
+                    .ok_or(StateError::new(format!(
+                        "No customer with the ID ({})",
+                        customer_id
+                    )))?
+                    .default_payment_info_id
+            }
+        };
+
+        let tracking_number = get_tracking_number();
+
+        conn.run(move |c| {
+            c.execute(
+                "
+                INSERT INTO base.orders
+                (customer_id, shipping_address_id, tracking_number, order_status, order_date, payment_info_id)
+                VALUES
+                ($1, $2, $3, $4, $5, $6)
+                ",
+                &[&customer_id, &address_id, &tracking_number, &"PR", &Local::today().naive_local(), &payment_info_id],
+            )
+        })
+        .await?;
+
         Ok(())
     }
 }

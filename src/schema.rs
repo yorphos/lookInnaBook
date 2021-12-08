@@ -63,6 +63,14 @@ pub mod entities {
             ))
         }
     }
+
+    #[derive(Serialize, Clone, Debug, Default)]
+    pub struct Customer {
+        pub name: String,
+        pub email: String,
+        pub default_shipping_address_id: PostgresInt,
+        pub default_payment_info_id: PostgresInt,
+    }
 }
 
 pub mod joined {
@@ -86,6 +94,7 @@ pub mod joined {
 pub mod no_id {
     use crate::db::query::Expiry;
 
+    #[derive(Clone, Debug)]
     pub struct Address {
         pub street_address: String,
         pub postal_code: String,
@@ -102,6 +111,7 @@ pub mod no_id {
         }
     }
 
+    #[derive(Clone)]
     pub struct PaymentInfo {
         pub name_on_card: String,
         pub expiry: Expiry,

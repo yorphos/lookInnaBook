@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use crate::db::conn::DbConn;
-use crate::db::error::CartError;
+use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
     add_to_cart, cart_set_book_quantity, get_books, get_customer_cart, get_customer_info,
     try_create_new_customer, validate_customer_login, Expiry,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::ISBN;
+use crate::schema::no_id::{Address, PaymentInfo};
 use crate::schema::{self, no_id};
 use chrono::{Duration, Local};
 use rand::{RngCore, SeedableRng};
@@ -249,12 +250,12 @@ pub async fn customer_cart_page(conn: DbConn, customer: Option<Customer>) -> Tem
                     context.insert("cart", &cart);
 
                     let isbns: Vec<ISBN> = cart.iter().map(|c| c.0).collect();
-                    let quantities: HashMap<ISBN, i32> = cart.iter().map(|p| p.clone()).collect();
+                    let quantities: HashMap<ISBN, u32> = cart.iter().map(|p| p.clone()).collect();
 
                     #[derive(serde::Serialize)]
                     struct BookWithQuantity {
                         book: Book,
-                        quantity: i32,
+                        quantity: u32,
                     }
 
                     let books: Vec<BookWithQuantity> = books
@@ -321,11 +322,100 @@ pub async fn checkout_page(conn: DbConn, customer: Customer) -> Template {
     let mut context = Context::new();
     let customer_id = customer.customer_id;
 
+    use schema::entities::Book;
+
     add_customer_info(&conn, &Some(customer), &mut context).await;
     match get_customer_cart(&conn, customer_id).await {
-        Ok(cart) => {
-            todo!()
-        }
+        Ok(cart) => match get_books(&conn).await {
+            Ok(books) => {
+                context.insert("cart", &cart);
+
+                let isbns: Vec<ISBN> = cart.iter().map(|c| c.0).collect();
+                let quantities: HashMap<ISBN, u32> = cart.iter().map(|p| p.clone()).collect();
+
+                #[derive(serde::Serialize)]
+                struct BookWithQuantity {
+                    book: Book,
+                    quantity: u32,
+                }
+
+                let books: Vec<BookWithQuantity> = books
+                    .into_iter()
+                    .filter(|b| isbns.contains(&b.isbn))
+                    .map(|b| BookWithQuantity {
+                        book: b.clone(),
+                        quantity: *quantities.get(&b.isbn).unwrap(),
+                    })
+                    .collect();
+
+                context.insert("books", &books);
+
+                Template::render("checkout_page", context.into_json())
+            }
+            Err(e) => render_error_template(format!("Error fetching books: {}", e)),
+        },
         Err(e) => render_error_template(format!("Server error: {}", e)),
+    }
+}
+
+#[derive(FromForm)]
+pub struct CreateOrder<'r> {
+    default_shipping: bool,
+    default_payment: bool,
+    street_address: &'r str,
+    postal_code: &'r str,
+    province: &'r str,
+    name_on_card: &'r str,
+    card_number: &'r str,
+    expiry: &'r str,
+    cvv: &'r str,
+    billing_street_address: &'r str,
+    billing_postal_code: &'r str,
+    billing_province: &'r str,
+}
+
+#[post("/order/create", data = "<create_order>")]
+pub async fn create_order_req(
+    conn: DbConn,
+    create_order: Form<CreateOrder<'_>>,
+    customer: Customer,
+) -> Template {
+    let result: Result<(), OrderError> = try {
+        let cart = get_customer_cart(&conn, customer.customer_id).await?;
+
+        let address = if create_order.default_shipping {
+            None
+        } else {
+            Some(Address::new(
+                create_order.street_address,
+                create_order.postal_code,
+                create_order.province,
+            ))
+        };
+
+        let payment_info = if create_order.default_payment {
+            None
+        } else {
+            let address = Address::new(
+                create_order.billing_street_address,
+                create_order.billing_postal_code,
+                create_order.billing_province,
+            );
+            Some(PaymentInfo::new(
+                create_order.name_on_card,
+                Expiry::from_str(create_order.expiry).ok_or(StateError::new("Invalid expiry"))?,
+                create_order.card_number,
+                create_order.cvv,
+                address,
+            ))
+        };
+
+        crate::db::query::create_order(&conn, customer.customer_id, cart, address, payment_info)
+            .await?;
+    };
+
+    match result {
+        Ok(_) => render_error_template("Success!"),
+        Err(e) => render_error_template(format!("Order error: {}", e)),
     }
 }
