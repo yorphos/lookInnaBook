@@ -1,0 +1,32 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="/style/owner_login.css" />
+{% endblock head %}
+
+{% block login_nav %}
+{% endblock login_nav %}
+
+{% block content %}
+
+<h1>Owner Login</h1>
+
+<form action="/login/owner" method="post">
+  <ul>
+    <li>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required></input>
+    </li>
+    <li>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required></input>
+    </li>
+    <li>
+      <button type="submit">Login</button>
+    </li>
+  </ul>
+</form>
+
+
+{% endblock content %}

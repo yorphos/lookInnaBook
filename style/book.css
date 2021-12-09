@@ -1,1 +1,5 @@
 @import "header.css";
+
+.discontinued {
+    color: red;
+}

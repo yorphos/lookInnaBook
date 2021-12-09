@@ -1,0 +1,16 @@
+{% extends "base" %}
+
+{% block head %}
+    <link rel="stylesheet" href="/style/order_success.css" />
+{% endblock head %}
+
+{% block content %}
+<h1>Order Success!</h1>
+<div class="message">
+    Your order was successfully placed! Click below to go back to the home page or view order details!
+</div>
+<div class="home-container">
+<button onclick="window.location.replace(window.location.origin + '/order/view/{{ order_id }}')">See Order Details</button>
+<button onclick="window.location.replace(window.location.origin)">Go Back!</button>
+</div>
+{% endblock content %}

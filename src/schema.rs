@@ -8,6 +8,73 @@ pub mod entities {
     pub type PublisherID = PostgresInt;
 
     #[derive(Serialize, Clone, Debug)]
+    pub struct BookWithPublisherName {
+        pub isbn: ISBN,
+        pub title: String,
+        pub author_name: String,
+        pub genre: String,
+        pub publisher_id: PostgresInt,
+        pub publisher_name: String,
+        pub num_pages: PostgresInt,
+        pub price: PostgresNumeric,
+        pub author_royalties: PostgresNumeric,
+        pub reorder_threshold: PostgresInt,
+        pub stock: PostgresInt,
+        pub discontinued: bool,
+    }
+
+    impl BookWithPublisherName {
+        pub fn new(
+            isbn: ISBN,
+            title: String,
+            author_name: String,
+            genre: String,
+            publisher_id: PostgresInt,
+            publisher_name: String,
+            num_pages: PostgresInt,
+            price: PostgresNumeric,
+            author_royalties: PostgresNumeric,
+            reorder_threshold: PostgresInt,
+            stock: PostgresInt,
+            discontinued: bool,
+        ) -> BookWithPublisherName {
+            BookWithPublisherName {
+                isbn,
+                title,
+                author_name,
+                genre,
+                publisher_id,
+                publisher_name,
+                num_pages,
+                price,
+                author_royalties,
+                reorder_threshold,
+                stock,
+                discontinued,
+            }
+        }
+
+        pub fn from_row(
+            row: &postgres::Row,
+        ) -> Result<BookWithPublisherName, postgres::error::Error> {
+            Ok(BookWithPublisherName::new(
+                row.try_get("isbn")?,
+                row.try_get("title")?,
+                row.try_get("author_name")?,
+                row.try_get("genre")?,
+                row.try_get("publisher_id")?,
+                row.try_get("publisher_name")?,
+                row.try_get("num_pages")?,
+                row.try_get("price")?,
+                row.try_get("author_royalties")?,
+                row.try_get("reorder_threshold")?,
+                row.try_get("stock")?,
+                row.try_get("discontinued")?,
+            ))
+        }
+    }
+
+    #[derive(Serialize, Clone, Debug)]
     pub struct Book {
         pub isbn: ISBN,
         pub title: String,
@@ -19,6 +86,7 @@ pub mod entities {
         pub author_royalties: PostgresNumeric,
         pub reorder_threshold: PostgresInt,
         pub stock: PostgresInt,
+        pub discontinued: bool,
     }
 
     impl Book {
@@ -33,6 +101,7 @@ pub mod entities {
             author_royalties: PostgresNumeric,
             reorder_threshold: PostgresInt,
             stock: PostgresInt,
+            discontinued: bool,
         ) -> Book {
             Book {
                 isbn,
@@ -45,6 +114,7 @@ pub mod entities {
                 author_royalties,
                 reorder_threshold,
                 stock,
+                discontinued,
             }
         }
 
@@ -60,6 +130,7 @@ pub mod entities {
                 row.try_get("author_royalties")?,
                 row.try_get("reorder_threshold")?,
                 row.try_get("stock")?,
+                row.try_get("discontinued")?,
             ))
         }
     }

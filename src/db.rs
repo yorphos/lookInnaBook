@@ -81,6 +81,34 @@ pub mod query {
         Ok(rows.iter().flat_map(|row| Book::from_row(row)).collect())
     }
 
+    pub async fn get_books_with_publisher_name(
+        conn: &DbConn,
+    ) -> Result<Vec<BookWithPublisherName>, postgres::error::Error> {
+        let rows = conn
+            .run(|c| c.query("
+                            SELECT
+                            isbn,
+                            title,
+                            author_name,
+                            genre,
+                            base.book.publisher_id,
+                            company_name AS publisher_name,
+                            num_pages,
+                            price,
+                            author_royalties,
+                            reorder_threshold,
+                            stock,
+                            discontinued,
+                            company_name AS publisher_name
+                            FROM base.book INNER JOIN base.publisher ON base.book.publisher_id = base.publisher.publisher_id;",
+                             &[]))
+            .await?;
+        Ok(rows
+            .iter()
+            .flat_map(|row| BookWithPublisherName::from_row(row))
+            .collect())
+    }
+
     pub async fn validate_customer_login<T: AsRef<str>>(
         conn: &DbConn,
         email: T,
@@ -415,6 +443,8 @@ pub mod query {
         if !check_enough_stock(conn, isbn, quantity).await? {
             Err(CartError::NotEnoughStock)?;
         }
+
+        let quantity = quantity as i32;
 
         if quantity == 0 {
             conn.run(move |c| {

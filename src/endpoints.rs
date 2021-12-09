@@ -1,14 +1,16 @@
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 use crate::db::conn::DbConn;
 use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
-    add_to_cart, cart_set_book_quantity, get_books, get_books_for_order, get_customer_cart,
-    get_customer_info, get_customer_orders_info, get_order_info, try_create_new_customer,
-    validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
+    add_to_cart, cart_set_book_quantity, get_books, get_books_for_order,
+    get_books_with_publisher_name, get_customer_cart, get_customer_info, get_customer_orders_info,
+    get_order_info, try_create_new_customer, validate_customer_login, validate_owner_login, Expiry,
+    OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
-use crate::schema::entities::{Book, PostgresInt, ISBN};
+use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
 use crate::schema::joined::Order;
 use crate::schema::no_id::{Address, PaymentInfo};
 use crate::schema::{self, no_id};
@@ -21,7 +23,10 @@ use rocket::response::Redirect;
 use rocket::State;
 use rocket_dyn_templates::tera::Context;
 use rocket_dyn_templates::Template;
+use rust_decimal::Decimal;
 use serde::Serialize;
+use std::str::FromStr;
+use strsim::sorensen_dice;
 
 use crate::{request_guards::*, SessionTokenState};
 
@@ -61,15 +66,130 @@ fn add_owner_tag(owner: &Option<Owner>, context: &mut Context) {
     }
 }
 
-#[get("/")]
-pub async fn index(conn: DbConn, customer: Option<Customer>, owner: Option<Owner>) -> Template {
+fn extract_genre_list(books: &Vec<BookWithPublisherName>) -> HashSet<String> {
+    books.iter().map(|book| book.genre.clone()).collect()
+}
+
+#[derive(FromForm, Debug)]
+pub struct Search<'r> {
+    title: Option<&'r str>,
+    isbn: Option<&'r str>,
+    genre: Option<&'r str>,
+    author: Option<&'r str>,
+    publisher: Option<&'r str>,
+    min_pages: Option<i32>,
+    max_pages: Option<i32>,
+    min_price: Option<&'r str>,
+    max_price: Option<&'r str>,
+    show_discontinued: Option<bool>,
+    show_no_stock: Option<bool>,
+}
+
+fn filter_books(
+    books: Vec<BookWithPublisherName>,
+    search: Search<'_>,
+) -> Vec<BookWithPublisherName> {
+    let Search {
+        title,
+        isbn,
+        genre,
+        author,
+        publisher,
+        min_pages,
+        max_pages,
+        min_price,
+        max_price,
+        show_discontinued,
+        show_no_stock,
+    } = search;
+    let mut books = books;
+
+    if !show_discontinued.unwrap_or(false) {
+        books.retain(|book| !book.discontinued);
+    }
+
+    if !show_no_stock.unwrap_or(false) {
+        books.retain(|book| book.stock != 0);
+    }
+
+    let isbn = isbn.unwrap_or("");
+    if isbn != "" {
+        if let Ok(isbn) = isbn.parse::<i32>() {
+            books.retain(|book| book.isbn == isbn);
+        }
+    }
+
+    let genre = genre.unwrap_or("");
+    if genre != "" {
+        if genre != "N/A" {
+            books.retain(|book| book.genre == genre);
+        }
+    }
+
+    let author = author.unwrap_or("");
+    if author != "" {
+        books.retain(|book| book.author_name == author);
+    }
+
+    let publisher = publisher.unwrap_or("");
+    if publisher != "" {
+        books.retain(|book| book.publisher_name == publisher);
+    }
+
+    if let Some(min_pages) = min_pages {
+        books.retain(|book| book.num_pages >= min_pages);
+    }
+
+    if let Some(max_pages) = max_pages {
+        books.retain(|book| book.num_pages <= max_pages);
+    }
+
+    if let Some(min_price) = min_price {
+        if let Ok(min_price) = Decimal::from_str(min_price) {
+            books.retain(|book| book.price >= min_price);
+        }
+    }
+
+    if let Some(max_price) = max_price {
+        if let Ok(max_price) = Decimal::from_str(max_price) {
+            books.retain(|book| book.price <= max_price);
+        }
+    }
+
+    let title = title.unwrap_or("");
+    if title != "" {
+        books.sort_by(|a, b| {
+            let a_score = sorensen_dice(&a.title, title);
+            let b_score = sorensen_dice(&b.title, title);
+
+            // Descending sort
+            match b_score.partial_cmp(&a_score) {
+                Some(ord) => ord,
+                None => Ordering::Equal,
+            }
+        });
+    }
+
+    books
+}
+
+#[get("/?<search>")]
+pub async fn index(
+    conn: DbConn,
+    customer: Option<Customer>,
+    owner: Option<Owner>,
+    search: Search<'_>,
+) -> Template {
     let mut context = Context::new();
     add_customer_info(&conn, &customer, &mut context).await;
     add_owner_tag(&owner, &mut context);
 
-    let books = get_books(&conn).await;
+    let books = get_books_with_publisher_name(&conn).await;
     if let Ok(books) = books {
+        let books = filter_books(books, search);
+
         context.insert("books", &books);
+        context.insert("genres", &extract_genre_list(&books));
 
         if let Some(customer) = customer {
             let customer_info = get_customer_info(&conn, customer.customer_id).await;
@@ -345,15 +465,12 @@ pub async fn customer_cart_set_quantity(
     customer: Customer,
     isbn: ISBN,
     quantity: u32,
-) -> Result<(), rocket::response::status::Custom<String>> {
-    use rocket::response::status;
+) -> Result<(), (Status, String)> {
     cart_set_book_quantity(&conn, customer.customer_id, isbn, quantity)
         .await
         .map_err(|e| match e {
-            CartError::NotEnoughStock => {
-                status::Custom(Status::Conflict, "Insufficient book stock".to_owned())
-            }
-            CartError::DBError(_) => status::Custom(Status::InternalServerError, e.to_string()),
+            CartError::NotEnoughStock => (Status::Conflict, "Insufficient book stock".to_owned()),
+            CartError::DBError(e) => (Status::InternalServerError, e.to_string()),
         })
 }
 
@@ -632,7 +749,7 @@ pub async fn owner_login(
                 let expiry = Local::now() + Duration::days(30);
 
                 session_tokens.insert(token, (SessionType::DefaultOwner, expiry));
-                Redirect::to(uri!(index()))
+                Redirect::to(uri!("/"))
             }
             OwnerLoginType::OwnerAccount(owner_id) => {
                 let token = create_session_token();
