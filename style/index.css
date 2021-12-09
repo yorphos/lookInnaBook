@@ -12,4 +12,6 @@
     padding: 1%;
     border: solid;
     margin: 1%;
+    max-width: 225px;
+    min-width: 225px;
 }

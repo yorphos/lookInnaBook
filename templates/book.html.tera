@@ -15,10 +15,16 @@
 {% if customer %}
 <p><button onclick=
            "
-            fetch(window.location.origin + '/customer/cart/add/{{ book.isbn }}',
-            {
-            method: 'PUT',
-            });
+            async function task() {
+                await fetch(window.location.origin + '/customer/cart/add/{{ book.isbn }}',
+                {
+                method: 'PUT',
+                });
+
+                window.location.reload();
+            }
+
+            task();
             ">Add To Cart</button></p>
 {% endif %}
 

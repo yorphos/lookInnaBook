@@ -337,7 +337,7 @@ pub async fn customer_cart_set_quantity(
     cart_set_book_quantity(&conn, customer.customer_id, isbn, quantity)
         .await
         .map_err(|e| match e {
-            CartError::NotEnoughStock(_) => {
+            CartError::NotEnoughStock => {
                 status::Custom(Status::Conflict, "Insufficient book stock".to_owned())
             }
             CartError::DBError(_) => status::Custom(Status::InternalServerError, e.to_string()),
@@ -427,7 +427,7 @@ pub async fn create_order_req(
     create_order: Form<CreateOrder<'_>>,
     customer: Customer,
 ) -> Template {
-    let result: Result<(), OrderError> = try {
+    let result: Result<PostgresInt, OrderError> = try {
         let cart = get_customer_cart(&conn, customer.customer_id).await?;
 
         let address = if create_order.default_shipping {
@@ -458,12 +458,13 @@ pub async fn create_order_req(
         };
 
         crate::db::query::create_order(&conn, customer.customer_id, cart, address, payment_info)
-            .await?;
+            .await?
     };
 
     match result {
-        Ok(_) => {
-            let context = Context::new();
+        Ok(order_id) => {
+            let mut context = Context::new();
+            context.insert("order_id", &order_id);
             Template::render("order_success", context.into_json())
         }
         Err(e) => {

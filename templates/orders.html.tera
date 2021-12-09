@@ -15,6 +15,7 @@
 {% block content %}
 
 {% if num_orders > 0 %}
+<h1>Orders</h1>
 <div class="orders">
 {% for order in orders %}
 <div class="order">

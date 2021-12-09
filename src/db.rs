@@ -6,163 +6,53 @@ pub mod conn {
 }
 
 pub mod error {
-    use std::error::Error;
-    use std::fmt::Display;
+    use thiserror::Error;
 
-    use bcrypt::BcryptError;
-
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Error)]
     pub struct StateError {
-        what: String,
+        msg: String,
     }
 
     impl StateError {
-        pub fn new<T: AsRef<str>>(what: T) -> StateError {
+        pub fn new<T: AsRef<str>>(msg: T) -> StateError {
             StateError {
-                what: what.as_ref().to_owned(),
+                msg: msg.as_ref().to_owned(),
             }
         }
     }
 
-    impl Error for StateError {}
-
-    impl Display for StateError {
+    impl std::fmt::Display for StateError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "Invalid application state: {}", self.what)
+            write!(f, "{}", self.msg)
         }
     }
 
-    #[derive(Debug, Clone, Copy)]
-    pub struct NotEnoughStockError {}
-
-    impl NotEnoughStockError {
-        pub fn new() -> NotEnoughStockError {
-            NotEnoughStockError {}
-        }
-    }
-
-    impl Error for NotEnoughStockError {}
-
-    impl Display for NotEnoughStockError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "Not enough stock for that operation")
-        }
-    }
-
-    #[derive(Debug)]
+    #[derive(Debug, Error)]
     pub enum CartError {
-        NotEnoughStock(NotEnoughStockError),
-        DBError(postgres::error::Error),
+        #[error("Insufficient stock for quantity change")]
+        NotEnoughStock,
+        #[error("Internal DB error: `{0}`")]
+        DBError(#[from] postgres::error::Error),
     }
 
-    impl Display for CartError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::DBError(err) => Display::fmt(&err, f),
-                Self::NotEnoughStock(err) => Display::fmt(&err, f),
-            }
-        }
-    }
-
-    impl From<postgres::error::Error> for CartError {
-        fn from(e: postgres::error::Error) -> Self {
-            CartError::DBError(e)
-        }
-    }
-
-    impl From<NotEnoughStockError> for CartError {
-        fn from(e: NotEnoughStockError) -> Self {
-            CartError::NotEnoughStock(e)
-        }
-    }
-
-    #[derive(Debug)]
+    #[derive(Debug, Error)]
     pub enum OrderError {
-        NotEnoughStock(NotEnoughStockError),
-        DBError(postgres::error::Error),
-        StateError(StateError),
+        #[error("Insufficient stock for order")]
+        NotEnoughStock,
+        #[error("Internal DB error: `{0}`")]
+        DBError(#[from] postgres::error::Error),
+        #[error("Internal state error: `{0}`")]
+        StateError(#[from] StateError),
     }
 
-    impl Display for OrderError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::DBError(err) => Display::fmt(&err, f),
-                Self::NotEnoughStock(err) => Display::fmt(&err, f),
-                Self::StateError(err) => Display::fmt(&err, f),
-            }
-        }
-    }
-
-    impl From<postgres::error::Error> for OrderError {
-        fn from(e: postgres::error::Error) -> Self {
-            Self::DBError(e)
-        }
-    }
-
-    impl From<NotEnoughStockError> for OrderError {
-        fn from(e: NotEnoughStockError) -> Self {
-            Self::NotEnoughStock(e)
-        }
-    }
-
-    impl From<StateError> for OrderError {
-        fn from(e: StateError) -> Self {
-            Self::StateError(e)
-        }
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct CredentialError {}
-
-    impl CredentialError {
-        pub fn new() -> CredentialError {
-            CredentialError {}
-        }
-    }
-
-    impl Error for CredentialError {}
-
-    impl Display for CredentialError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "Invalid email/password")
-        }
-    }
-
-    #[derive(Debug)]
+    #[derive(Debug, Error)]
     pub enum LoginError {
-        DBError(postgres::error::Error),
-        CredentialError(CredentialError),
-        BCryptError(bcrypt::BcryptError),
-    }
-
-    impl Error for LoginError {}
-
-    impl Display for LoginError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::DBError(err) => Display::fmt(&err, f),
-                Self::CredentialError(err) => Display::fmt(&err, f),
-                Self::BCryptError(err) => Display::fmt(&err, f),
-            }
-        }
-    }
-
-    impl From<postgres::error::Error> for LoginError {
-        fn from(e: postgres::error::Error) -> Self {
-            LoginError::DBError(e)
-        }
-    }
-
-    impl From<CredentialError> for LoginError {
-        fn from(e: CredentialError) -> Self {
-            LoginError::CredentialError(e)
-        }
-    }
-
-    impl From<BcryptError> for LoginError {
-        fn from(e: BcryptError) -> Self {
-            LoginError::BCryptError(e)
-        }
+        #[error("Internal DB error: `{0}`")]
+        DBError(#[from] postgres::error::Error),
+        #[error("Invalid email/password")]
+        CredentialError,
+        #[error("Internal bcrypt error")]
+        BCryptError(#[from] bcrypt::BcryptError),
     }
 }
 
@@ -170,10 +60,8 @@ pub mod query {
     use super::conn::DbConn;
     use super::error::CartError;
     use super::error::LoginError;
-    use super::error::NotEnoughStockError;
     use super::error::OrderError;
     use super::error::StateError;
-    use crate::db::error::CredentialError;
     use crate::schema;
     use crate::schema::entities::*;
     use crate::schema::joined::Order;
@@ -218,10 +106,10 @@ pub mod query {
                 if bcrypt::verify(password, password_hash)? {
                     Ok(customer_id)
                 } else {
-                    Err(CredentialError::new())?
+                    Err(LoginError::CredentialError)?
                 }
             }
-            None => Err(CredentialError::new())?,
+            None => Err(LoginError::CredentialError)?,
         }
     }
 
@@ -527,7 +415,7 @@ pub mod query {
         quantity: u32,
     ) -> Result<(), CartError> {
         if !check_enough_stock(conn, isbn, quantity).await? {
-            Err(NotEnoughStockError::new())?;
+            Err(CartError::NotEnoughStock)?;
         }
 
         if quantity == 0 {
@@ -695,13 +583,65 @@ pub mod query {
         rng.next_u32().to_string()
     }
 
+    pub async fn clear_cart(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+    ) -> Result<(), postgres::error::Error> {
+        conn.run(move |c| {
+            c.execute(
+                "DELETE FROM base.in_cart WHERE customer_id = $1",
+                &[&customer_id],
+            )
+        })
+        .await?;
+
+        Ok(())
+    }
+
+    async fn add_books_to_order(
+        conn: &DbConn,
+        books: Vec<(ISBN, PostgresInt)>,
+        order_id: PostgresInt,
+    ) -> Result<(), postgres::error::Error> {
+        for (isbn, quantity) in books {
+            conn.run(move |c| {
+                c.execute(
+                    "
+                    INSERT INTO base.in_order
+                    VALUES ($1, $2, $3);
+                    ",
+                    &[&isbn, &order_id, &quantity],
+                )
+            })
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn remove_book_stock(
+        conn: &DbConn,
+        books: Vec<(ISBN, PostgresInt)>,
+    ) -> Result<(), postgres::error::Error> {
+        for (isbn, quantity) in books {
+            conn.run(move |c| {
+                c.execute(
+                    "UPDATE base.book SET stock = stock - $1 WHERE isbn = $2;",
+                    &[&quantity, &isbn],
+                )
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn create_order(
         conn: &DbConn,
         customer_id: PostgresInt,
         books: Vec<(ISBN, u32)>,
         address: Option<schema::no_id::Address>,
         payment_info: Option<schema::no_id::PaymentInfo>,
-    ) -> Result<(), OrderError> {
+    ) -> Result<PostgresInt, OrderError> {
         let books: Vec<(ISBN, PostgresInt)> = books
             .into_iter()
             .map(|(isbn, quantity)| (isbn, quantity as i32))
@@ -709,7 +649,7 @@ pub mod query {
         for (isbn, quantity) in books.iter() {
             let quantity = i32::max(*quantity, 0) as u32;
             if !check_enough_stock(conn, *isbn, quantity).await? {
-                Err(NotEnoughStockError::new())?;
+                Err(OrderError::NotEnoughStock)?;
             }
         }
 
@@ -755,28 +695,12 @@ pub mod query {
         })
         .await?.try_get("order_id")?;
 
-        for (isbn, quantity) in books {
-            conn.run(move |c| {
-                c.execute(
-                    "
-                    INSERT INTO base.in_order
-                    VALUES ($1, $2, $3);
-                    ",
-                    &[&isbn, &order_id, &quantity],
-                )
-            })
-            .await?;
-        }
+        add_books_to_order(conn, books.clone(), order_id).await?;
+        remove_book_stock(conn, books).await?;
 
-        conn.run(move |c| {
-            c.execute(
-                "DELETE FROM base.in_cart WHERE customer_id = $1",
-                &[&customer_id],
-            )
-        })
-        .await?;
+        clear_cart(conn, customer_id).await?;
 
-        Ok(())
+        Ok(order_id)
     }
 
     pub async fn get_books_for_order(

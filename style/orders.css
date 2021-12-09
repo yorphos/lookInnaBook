@@ -1,11 +1,17 @@
 @import "header.css";
 
-.cart-books {
-    display: flex;
-    flex-flow: row;
+#content {
+    text-align: center;
 }
 
-.cart-book {
+.orders {
+    display: flex;
+    flex-flow: column;
+    width: 25%;
+    margin: auto;
+}
+
+.order {
     display: flex;
     flex-flow: column;
     align-items: center;
