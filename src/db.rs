@@ -113,22 +113,6 @@ pub mod query {
         }
     }
 
-    pub async fn does_customer_with_email_exist<'a, T: AsRef<str>>(
-        conn: &DbConn,
-        email: T,
-    ) -> Result<bool, postgres::error::Error> {
-        let email = email.as_ref().to_string();
-        Ok(conn
-            .run(move |c| {
-                c.query_opt(
-                    "SELECT * FROM base.customer WHERE base.customer.email = $1",
-                    &[&email],
-                )
-            })
-            .await?
-            .is_some())
-    }
-
     pub async fn try_add_address(
         conn: &DbConn,
         address: no_id::Address,
@@ -235,32 +219,46 @@ pub mod query {
             .is_empty())
     }
 
+    pub enum OwnerLoginType {
+        DefaultOwner,
+        OwnerAccount(PostgresInt),
+    }
+
     pub async fn validate_owner_login<T: AsRef<str>>(
         conn: &DbConn,
         email: T,
         password: T,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    ) -> Result<OwnerLoginType, LoginError> {
         let email = email.as_ref().to_owned();
         let password = password.as_ref().to_owned();
 
         if !owner_exists(conn).await? {
-            Ok(email == "admin@local" && password == "default")
+            if email == "admin@local" && password == "default" {
+                Ok(OwnerLoginType::DefaultOwner)
+            } else {
+                Err(LoginError::CredentialError)
+            }
         } else {
-            let owner = conn
+            let row = conn
                 .run(move |c| {
                     c.query_opt(
-                        "SELECT password_hash FROM base.customer WHERE email = $1",
+                        "SELECT owner_id, password_hash FROM base.owner WHERE email = $1",
                         &[&email],
                     )
                 })
                 .await?;
 
-            match owner {
-                Some(owner) => {
-                    let password_hash = owner.get("password_hash");
-                    Ok(bcrypt::verify(password, password_hash)?)
+            if let Some(row) = row {
+                let owner_id = row.try_get("owner_id")?;
+                let password_hash = row.try_get("password_hash")?;
+
+                if bcrypt::verify(password, password_hash)? {
+                    Ok(OwnerLoginType::OwnerAccount(owner_id))
+                } else {
+                    Err(LoginError::CredentialError)
                 }
-                None => Ok(false),
+            } else {
+                Err(LoginError::CredentialError)
             }
         }
     }

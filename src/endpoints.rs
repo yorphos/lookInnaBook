@@ -5,7 +5,7 @@ use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
     add_to_cart, cart_set_book_quantity, get_books, get_books_for_order, get_customer_cart,
     get_customer_info, get_customer_orders_info, get_order_info, try_create_new_customer,
-    validate_customer_login, Expiry,
+    validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, PostgresInt, ISBN};
@@ -55,10 +55,17 @@ async fn add_customer_info(conn: &DbConn, customer: &Option<Customer>, context: 
     }
 }
 
+fn add_owner_tag(owner: &Option<Owner>, context: &mut Context) {
+    if let Some(_) = owner {
+        context.insert("owner_logged_in", &true);
+    }
+}
+
 #[get("/")]
-pub async fn index(conn: DbConn, customer: Option<Customer>) -> Template {
+pub async fn index(conn: DbConn, customer: Option<Customer>, owner: Option<Owner>) -> Template {
     let mut context = Context::new();
     add_customer_info(&conn, &customer, &mut context).await;
+    add_owner_tag(&owner, &mut context);
 
     let books = get_books(&conn).await;
     if let Ok(books) = books {
@@ -137,6 +144,16 @@ pub struct Login<'r> {
     password: &'r str,
 }
 
+fn create_session_token() -> String {
+    let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
+    let mut token: [u8; 32] = [0; 32];
+    rng.fill_bytes(&mut token);
+
+    let token = base64::encode(token);
+
+    token
+}
+
 #[post("/login", data = "<login_data>")]
 pub async fn login(
     conn: DbConn,
@@ -146,11 +163,7 @@ pub async fn login(
 ) -> Redirect {
     match validate_customer_login(&conn, login_data.email, login_data.password).await {
         Ok(customer_id) => {
-            let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
-            let mut token: [u8; 32] = [0; 32];
-            rng.fill_bytes(&mut token);
-
-            let token = base64::encode(token);
+            let token = create_session_token();
 
             cookies.add_private(Cookie::new(CUST_SESSION_COOKIE_NAME, token.clone()));
 
@@ -351,6 +364,10 @@ pub async fn account_logout(
 ) -> () {
     let mut session_tokens = session_tokens.lock().await;
     if let Some(cookie) = cookies.get_private(CUST_SESSION_COOKIE_NAME) {
+        session_tokens.remove(cookie.value());
+    }
+
+    if let Some(cookie) = cookies.get_private(OWNER_SESSION_COOKIE_NAME) {
         session_tokens.remove(cookie.value());
     }
 }
@@ -587,5 +604,49 @@ pub async fn view_order(conn: DbConn, customer: Customer, order_id: i32) -> Temp
         Err(e) => {
             render_error_template(format!("Server error: {}", e), &conn, &Some(customer)).await
         }
+    }
+}
+
+#[get("/login/owner")]
+pub async fn owner_login_page() -> Template {
+    let context = HashMap::<&str, &str>::new();
+    Template::render("owner_login", &context)
+}
+
+#[post("/login/owner", data = "<login_data>")]
+pub async fn owner_login(
+    conn: DbConn,
+    login_data: Form<Login<'_>>,
+    session_tokens: &State<SessionTokenState>,
+    cookies: &CookieJar<'_>,
+) -> Redirect {
+    match validate_owner_login(&conn, login_data.email, login_data.password).await {
+        Ok(login) => match login {
+            OwnerLoginType::DefaultOwner => {
+                let token = create_session_token();
+
+                cookies.add_private(Cookie::new(OWNER_SESSION_COOKIE_NAME, token.clone()));
+
+                let mut session_tokens = session_tokens.lock().await;
+
+                let expiry = Local::now() + Duration::days(30);
+
+                session_tokens.insert(token, (SessionType::DefaultOwner, expiry));
+                Redirect::to(uri!(index()))
+            }
+            OwnerLoginType::OwnerAccount(owner_id) => {
+                let token = create_session_token();
+
+                cookies.add_private(Cookie::new(OWNER_SESSION_COOKIE_NAME, token.clone()));
+
+                let mut session_tokens = session_tokens.lock().await;
+
+                let expiry = Local::now() + Duration::days(30);
+
+                session_tokens.insert(token, (SessionType::Owner(owner_id), expiry));
+                Redirect::to(uri!(customer_page()))
+            }
+        },
+        Err(e) => Redirect::to(uri!(login_failed(e.to_string()))),
     }
 }

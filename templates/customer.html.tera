@@ -11,6 +11,7 @@
 
 <h1>Customer Profile</h1>
 
-Name: {{ customer.name }}
+<p>Name: {{ customer.name }}</p>
+<p>Email: {{ customer.email }}</p>
 
 {% endblock content %}
