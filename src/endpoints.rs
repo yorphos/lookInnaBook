@@ -4,10 +4,10 @@ use std::collections::{HashMap, HashSet};
 use crate::db::conn::DbConn;
 use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
-    add_to_cart, cart_set_book_quantity, get_books, get_books_for_order,
+    add_to_cart, cart_set_book_quantity, discontinue_books, get_books, get_books_for_order,
     get_books_with_publisher_name, get_customer_cart, get_customer_info, get_customer_orders_info,
-    get_order_info, try_create_new_customer, validate_customer_login, validate_owner_login, Expiry,
-    OwnerLoginType,
+    get_order_info, try_create_new_customer, undiscontinue_books, validate_customer_login,
+    validate_owner_login, Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
@@ -20,6 +20,7 @@ use rocket::form::validate::Contains;
 use rocket::form::Form;
 use rocket::http::{Cookie, CookieJar, Status};
 use rocket::response::Redirect;
+use rocket::serde::json::Json;
 use rocket::State;
 use rocket_dyn_templates::tera::Context;
 use rocket_dyn_templates::Template;
@@ -190,14 +191,6 @@ pub async fn index(
 
         context.insert("books", &books);
         context.insert("genres", &extract_genre_list(&books));
-
-        if let Some(customer) = customer {
-            let customer_info = get_customer_info(&conn, customer.customer_id).await;
-
-            if let Ok(customer_info) = customer_info {
-                context.insert("customer", &customer_info);
-            }
-        }
 
         Template::render("index", context.into_json())
     } else {
@@ -765,5 +758,47 @@ pub async fn owner_login(
             }
         },
         Err(e) => Redirect::to(uri!(login_failed(e.to_string()))),
+    }
+}
+
+#[get("/owner/manage/view?<search>")]
+pub async fn book_management(conn: DbConn, owner: Owner, search: Search<'_>) -> Template {
+    let mut context = Context::new();
+    add_owner_tag(&Some(owner), &mut context);
+
+    let books = get_books_with_publisher_name(&conn).await;
+    if let Ok(books) = books {
+        let books = filter_books(books, search);
+
+        context.insert("books", &books);
+        context.insert("genres", &extract_genre_list(&books));
+
+        Template::render("book_management", context.into_json())
+    } else {
+        render_error_template(format!("Could not query books: {:?}", books), &conn, &None).await
+    }
+}
+
+#[put("/owner/manage/books/discontinue", data = "<books>")]
+pub async fn discontinue_books_endpoint(
+    conn: DbConn,
+    _owner: Owner,
+    books: Json<Vec<ISBN>>,
+) -> Result<(), (Status, String)> {
+    match discontinue_books(&conn, books.into_inner()).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err((Status::InternalServerError, e.to_string())),
+    }
+}
+
+#[put("/owner/manage/books/undiscontinue", data = "<books>")]
+pub async fn undiscontinue_books_endpoint(
+    conn: DbConn,
+    _owner: Owner,
+    books: Json<Vec<ISBN>>,
+) -> Result<(), (Status, String)> {
+    match undiscontinue_books(&conn, books.into_inner()).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err((Status::InternalServerError, e.to_string())),
     }
 }

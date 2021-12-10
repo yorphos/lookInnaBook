@@ -24,6 +24,9 @@
     <h4>{{ book.book.title }}</h4>
     <p>By: {{ book.book.author_name }}</p>
     <p>Quantity: {{ book.quantity }}</p>
+    {% if book.book.discontinued == true %}
+    <p class="discontinued">Discontinued</p>
+    {% endif %}
     <a href="/book/{{ book.book.isbn }}">See more...</a>
 </div>
 {% endfor %}

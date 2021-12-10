@@ -873,4 +873,38 @@ pub mod query {
 
         Ok(orders)
     }
+
+    pub async fn discontinue_books(
+        conn: &DbConn,
+        books: Vec<ISBN>,
+    ) -> Result<(), postgres::error::Error> {
+        for isbn in books {
+            conn.run(move |c| {
+                c.execute(
+                    "UPDATE base.book SET discontinued = true WHERE isbn = $1",
+                    &[&isbn],
+                )
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn undiscontinue_books(
+        conn: &DbConn,
+        books: Vec<ISBN>,
+    ) -> Result<(), postgres::error::Error> {
+        for isbn in books {
+            conn.run(move |c| {
+                c.execute(
+                    "UPDATE base.book SET discontinued = false WHERE isbn = $1",
+                    &[&isbn],
+                )
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
 }

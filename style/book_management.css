@@ -1,19 +1,26 @@
 @import "header.css";
 
+h1 {
+  text-align: center;
+}
+
 .books {
     display: flex;
     flex-flow: row;
 }
 
 .book {
-    display: flex;
-    flex-flow: column;
-    align-items: center;
     padding: 1%;
     border: solid;
     margin: 1%;
     max-width: 225px;
     min-width: 225px;
+}
+
+.book > label {
+    display: flex;
+    flex-flow: column;
+    align-items: center;
 }
 
 form {
@@ -35,13 +42,13 @@ form li + li {
   margin-top: 1em;
 }
 
-label {
+li > label {
   /* Uniform size & alignment */
   display: inline-block;
   text-align: right;
 }
 
-input {
+li > input {
   /* To make sure that all text fields have the same font settings
      By default, textareas have a monospace font */
   font: 1em sans-serif;

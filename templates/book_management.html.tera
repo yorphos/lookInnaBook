@@ -1,13 +1,55 @@
 {% extends "base" %}
 
 {% block head %}
-<link rel="stylesheet" href="/style/index.css" />
+<link rel="stylesheet" href="/style/book_management.css" />
 {% endblock head %}
 
-{% block home_nav %}
-{% endblock home_nav %}
+{% block book_management_nav %}
+{% endblock book_management_nav %}
 
 {% block content %}
+<h1>Book Management</h1>
+
+<script type="text/javascript">
+    function getSelectedBooks() {
+        let books = document.getElementById("books");
+
+        let bookCards = books.children;
+        let bookInputs = [...bookCards].map(card => card.children[0]);
+
+        let selectedBooks = bookInputs.map(bookInput => [bookInput.dataset.isbn, bookInput.checked]).filter(selectedBook => selectedBook[1] == true).map(selectedBook => parseInt(selectedBook[0]));
+
+        return selectedBooks;
+    }
+
+    async function discontinueSelectedBooks() {
+        let selectedBooks = getSelectedBooks();
+
+        await fetch(window.location.origin + '/owner/manage/books/discontinue', {
+            method: 'PUT',
+            body: JSON.stringify(selectedBooks),
+        });
+
+        window.location.reload();
+    }
+
+    async function unDiscontinueSelectedBooks() {
+        let selectedBooks = getSelectedBooks();
+
+        await fetch(window.location.origin + '/owner/manage/books/undiscontinue', {
+            method: 'PUT',
+            body: JSON.stringify(selectedBooks),
+        });
+
+        window.location.reload();
+    }
+
+</script>
+
+<p>
+<button onclick="discontinueSelectedBooks()">Discontinue Books</button>
+<button onclick="unDiscontinueSelectedBooks()">Un-Discontinue Books</button>
+</p>
 
 <button onclick="
                  let searchForm = document.getElementById('search-form');
@@ -19,7 +61,7 @@
                  }
                  ">Show/Hide Search</button>
 
-<form action="/" method="get" id="search-form">
+<form action="/owner/manage/view" method="get" id="search-form">
   <ul>
     <li>
         <label for="title">Title:</label>
@@ -76,18 +118,18 @@
   </ul>
 </form>
 
-<div class="books">
+<div class="books" id="books">
 {% for book in books %}
 <div class="book">
-    <a href="/book/{{ book.isbn }}">
+    <input type="checkbox" id="{{ book.isbn }}-checkbox" data-isbn="{{ book.isbn }}"></input>
+    <label for="{{ book.isbn }}-checkbox">
     <image src="https://via.placeholder.com/180"></image>
-    </a>
     <h4>{{ book.title }}</h4>
     <p>By: {{ book.author_name }}</p>
     {% if book.discontinued == true %}
     <p class="discontinued">Discontinued</p>
     {% endif %}
-    <a href="/book/{{ book.isbn }}">See more...</a>
+    </label>
 </div>
 {% endfor %}
 </div>

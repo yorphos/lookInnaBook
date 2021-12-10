@@ -44,6 +44,9 @@ fn rocket() -> _ {
                 view_order,
                 owner_login_page,
                 owner_login,
+                book_management,
+                discontinue_books_endpoint,
+                undiscontinue_books_endpoint,
             ],
         )
         .mount("/style", FileServer::from("style/"))

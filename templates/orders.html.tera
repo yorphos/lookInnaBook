@@ -4,8 +4,8 @@
 <link rel="stylesheet" href="/style/orders.css" />
 {% endblock head %}
 
-{% block cart_nav %}
-{% endblock cart_nav %}
+{% block order_nav %}
+{% endblock order_nav %}
 
 {% block error %}
 <div id="error-banner">
