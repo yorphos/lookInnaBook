@@ -1,0 +1,17 @@
+@import "header.css";
+
+h1 {
+    text-align: center;
+}
+
+.message {
+    text-align: center;
+}
+
+.home-container {
+    text-align: center;
+}
+
+.home-container > button {
+    margin: 20px;
+}

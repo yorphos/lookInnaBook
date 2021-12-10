@@ -8,6 +8,47 @@ pub mod entities {
     pub type PublisherID = PostgresInt;
 
     #[derive(Serialize, Clone, Debug)]
+    pub struct Publisher {
+        pub publisher_id: PublisherID,
+        pub company_name: String,
+        pub email: String,
+        pub phone_number: String,
+        pub bank_number: String,
+        pub address_id: PostgresInt,
+    }
+
+    impl Publisher {
+        pub fn new(
+            publisher_id: PublisherID,
+            company_name: String,
+            email: String,
+            phone_number: String,
+            bank_number: String,
+            address_id: PostgresInt,
+        ) -> Publisher {
+            Publisher {
+                publisher_id,
+                company_name,
+                email,
+                phone_number,
+                bank_number,
+                address_id,
+            }
+        }
+
+        pub fn from_row(row: &postgres::Row) -> Result<Publisher, postgres::error::Error> {
+            Ok(Publisher::new(
+                row.try_get("publisher_id")?,
+                row.try_get("company_name")?,
+                row.try_get("email")?,
+                row.try_get("phone_number")?,
+                row.try_get("bank_number")?,
+                row.try_get("address_id")?,
+            ))
+        }
+    }
+
+    #[derive(Serialize, Clone, Debug)]
     pub struct BookWithPublisherName {
         pub isbn: ISBN,
         pub title: String,

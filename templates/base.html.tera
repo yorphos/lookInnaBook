@@ -50,6 +50,9 @@
                             {% block book_management_nav %}
                             <a href="/owner/manage/view">Manage Books</a>
                             {% endblock book_management_nav %}
+                            {% block create_pub_nav %}
+                            <a href="/owner/create/publisher">Create Publisher</a>
+                            {% endblock create_pub_nav %}
                             {% block logout_nav %}
                             <button class="btn-link" onclick="
                                             async function task() {

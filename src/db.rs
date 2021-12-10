@@ -54,11 +54,20 @@ pub mod error {
         #[error("Internal bcrypt error")]
         BCryptError(#[from] bcrypt::BcryptError),
     }
+
+    #[derive(Debug, Error)]
+    pub enum CreatePublisherError {
+        #[error("Internal DB error: `{0}`")]
+        DBError(#[from] postgres::error::Error),
+        #[error("Publisher with that email exists")]
+        ConflictingEmailError,
+    }
 }
 
 pub mod query {
     use super::conn::DbConn;
     use super::error::CartError;
+    use super::error::CreatePublisherError;
     use super::error::LoginError;
     use super::error::OrderError;
     use super::error::StateError;
@@ -906,5 +915,26 @@ pub mod query {
         }
 
         Ok(())
+    }
+
+    pub async fn try_create_publisher<T: AsRef<str>>(
+        conn: &DbConn,
+        company_name: T,
+        email: T,
+        address: no_id::Address,
+        phone_number: T,
+        bank_number: T,
+    ) -> Result<PublisherID, CreatePublisherError> {
+        let company_name = company_name.as_ref().to_owned();
+        let email = email.as_ref().to_owned();
+        let phone_number = phone_number.as_ref().to_owned();
+        let bank_number = bank_number.as_ref().to_owned();
+
+        let address_id = get_or_insert_address(&conn, address).await?;
+
+        Ok(conn.run(move |c| c.query_one(
+            "INSERT INTO base.publisher
+            (company_name, phone_number, bank_number, address_id, email) VALUES ($1, $2, $3, $4, $5) RETURNING publisher_id;",
+            &[&company_name, &phone_number, &bank_number, &address_id, &email]) ).await?.try_get("publisher_id")?)
     }
 }

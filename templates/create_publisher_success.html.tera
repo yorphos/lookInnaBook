@@ -1,0 +1,16 @@
+{% extends "base" %}
+
+{% block head %}
+    <link rel="stylesheet" href="/style/create_publisher_success.css" />
+{% endblock head %}
+
+{% block content %}
+<h1>Create Publisher Success</h1>
+<div class="message">
+    Publisher creation was successful.
+</div>
+<div class="home-container">
+<button onclick="window.location.replace(window.location.origin + '/owner/create/publisher')">Return to Publisher Creation</button>
+<button onclick="window.location.replace(window.location.origin)">Homepage</button>
+</div>
+{% endblock content %}

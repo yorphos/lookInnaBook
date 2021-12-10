@@ -1,0 +1,52 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="/style/create_publisher.css" />
+{% endblock head %}
+
+{% block create_pub_nav %}
+{% endblock create_pub_nav %}
+
+{% block content %}
+
+<h1>Create Publisher</h1>
+
+<form action="/owner/create/publisher" method="post">
+  <ul>
+    <li>
+        <label for="company-name">Company Name:</label>
+        <input type="text" id="company-name" name="company_name" required></input>
+    </li>
+    <li>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required></input>
+    </li>
+    <li>
+        <label for="street-address">Street Address:</label>
+        <input type="text" id="street-address" name="street_address" required></input>
+    </li>
+    <li>
+        <label for="postal-code">Postal Code:</label>
+        <input type="text" id="postal-code" name="postal_code" required></input>
+    </li>
+    <li>
+        <label for="province">Province:</label>
+        <input type="text" id="province" name="province" required></input>
+    </li>
+    <li>
+        <label for="phone-number">Phone Number:</label>
+        <input type="text" id="phone-number" name="phone_number" required></input>
+    </li>
+    <li>
+        <label for="bank-number">Bank Number:</label>
+        <input type="text" id="bank-number" name="bank_number" required></input>
+    </li>
+    <li>
+      <button type="submit">Register Publisher</button>
+    </li>
+  </ul>
+</form>
+
+
+{% endblock content %}

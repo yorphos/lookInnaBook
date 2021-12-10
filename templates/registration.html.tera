@@ -2,7 +2,7 @@
 
 
 {% block head %}
-    <link rel="stylesheet" href="style/registration.css" />
+    <link rel="stylesheet" href="/style/registration.css" />
 {% endblock head %}
 
 {% block registration_nav %}

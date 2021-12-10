@@ -47,6 +47,8 @@ fn rocket() -> _ {
                 book_management,
                 discontinue_books_endpoint,
                 undiscontinue_books_endpoint,
+                create_publisher_page,
+                create_publisher,
             ],
         )
         .mount("/style", FileServer::from("style/"))

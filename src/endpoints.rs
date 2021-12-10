@@ -6,8 +6,8 @@ use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
     add_to_cart, cart_set_book_quantity, discontinue_books, get_books, get_books_for_order,
     get_books_with_publisher_name, get_customer_cart, get_customer_info, get_customer_orders_info,
-    get_order_info, try_create_new_customer, undiscontinue_books, validate_customer_login,
-    validate_owner_login, Expiry, OwnerLoginType,
+    get_order_info, try_create_new_customer, try_create_publisher, undiscontinue_books,
+    validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
@@ -800,5 +800,59 @@ pub async fn undiscontinue_books_endpoint(
     match undiscontinue_books(&conn, books.into_inner()).await {
         Ok(_) => Ok(()),
         Err(e) => Err((Status::InternalServerError, e.to_string())),
+    }
+}
+
+#[derive(FromForm)]
+pub struct CreatePublisher<'r> {
+    company_name: &'r str,
+    email: &'r str,
+    street_address: &'r str,
+    postal_code: &'r str,
+    province: &'r str,
+    phone_number: &'r str,
+    bank_number: &'r str,
+}
+
+#[get("/owner/create/publisher")]
+pub async fn create_publisher_page(owner: Owner) -> Template {
+    let mut context = Context::new();
+    add_owner_tag(&Some(owner), &mut context);
+
+    Template::render("create_publisher", context.into_json())
+}
+
+#[post("/owner/create/publisher", data = "<publisher>")]
+pub async fn create_publisher(
+    conn: DbConn,
+    _owner: Owner,
+    publisher: Form<CreatePublisher<'_>>,
+) -> Template {
+    let CreatePublisher {
+        company_name,
+        email,
+        street_address,
+        postal_code,
+        province,
+        phone_number,
+        bank_number,
+    } = *publisher;
+    let address = Address::new(street_address, postal_code, province);
+
+    match try_create_publisher(
+        &conn,
+        company_name,
+        email,
+        address,
+        phone_number,
+        bank_number,
+    )
+    .await
+    {
+        Ok(_) => {
+            let context = Context::new();
+            Template::render("create_publisher_success", context.into_json())
+        }
+        Err(e) => render_error_template(e.to_string(), &conn, &None).await,
     }
 }
