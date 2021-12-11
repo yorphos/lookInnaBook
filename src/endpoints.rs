@@ -4,18 +4,18 @@ use std::collections::{HashMap, HashSet};
 use crate::db::conn::DbConn;
 use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
-    add_to_cart, cart_set_book_quantity, discontinue_books, get_books, get_books_for_order,
-    get_books_with_publisher_name, get_customer_cart, get_customer_info, get_customer_orders_info,
-    get_order_info, get_sales_by_date, try_create_new_customer, try_create_publisher,
-    undiscontinue_books, validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
+    add_to_cart, cart_set_book_quantity, create_book, discontinue_books, get_books,
+    get_books_for_order, get_books_with_publisher_name, get_customer_cart, get_customer_info,
+    get_customer_orders_info, get_order_info, get_publishers, get_sales_by_date,
+    try_create_new_customer, try_create_publisher, undiscontinue_books, validate_customer_login,
+    validate_owner_login, Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
 use crate::schema::joined::Order;
 use crate::schema::no_id::{Address, PaymentInfo};
 use crate::schema::{self, no_id};
-use chrono::{Duration, Local, NaiveDate};
-use poloto::PlotNum;
+use chrono::{Duration, Local};
 use rand::{RngCore, SeedableRng};
 use rocket::form::validate::Contains;
 use rocket::form::Form;
@@ -899,4 +899,104 @@ pub async fn sales_report_image(conn: DbConn) -> (ContentType, String) {
     let svg = poloto::disp(|a| poloto::simple_theme(a, s)).to_string();
 
     (ContentType::SVG, svg)
+}
+
+#[get("/owner/create/book")]
+pub async fn create_book_page(owner: Owner, conn: DbConn) -> Template {
+    #[derive(Serialize, Debug)]
+    struct Publisher {
+        name: String,
+        email: String,
+        id: PostgresInt,
+    }
+
+    let publishers = match get_publishers(&conn).await {
+        Ok(v) => v,
+        Err(e) => return render_error_template(e.to_string(), &conn, &None).await,
+    };
+
+    let publishers: Vec<Publisher> = publishers
+        .into_iter()
+        .map(|publisher| Publisher {
+            name: publisher.company_name,
+            email: publisher.email,
+            id: publisher.publisher_id,
+        })
+        .collect();
+
+    let mut context = Context::new();
+    add_owner_tag(&Some(owner), &mut context);
+
+    context.insert("publishers", &publishers);
+
+    Template::render("create_book", context.into_json())
+}
+
+#[derive(FromForm)]
+pub struct CreateBook<'r> {
+    isbn: i32,
+    title: &'r str,
+    author_name: &'r str,
+    genre: &'r str,
+    publisher_id: i32,
+    num_pages: i32,
+    price: &'r str,
+    author_royalties: &'r str,
+    reorder_threshold: i32,
+    stock: i32,
+    discontinued: bool,
+}
+
+#[post("/owner/create/book", data = "<book>")]
+pub async fn create_book_endpoint(
+    conn: DbConn,
+    owner: Owner,
+    book: Form<CreateBook<'_>>,
+) -> Template {
+    let CreateBook {
+        isbn,
+        title,
+        author_name,
+        genre,
+        publisher_id,
+        num_pages,
+        price,
+        author_royalties,
+        reorder_threshold,
+        stock,
+        discontinued,
+    } = *book;
+
+    let book: Result<Book, <Decimal as FromStr>::Err> = try {
+        Book::new(
+            isbn,
+            title.to_string(),
+            author_name.to_string(),
+            genre.to_string(),
+            publisher_id,
+            num_pages,
+            Decimal::from_str(price)?,
+            Decimal::from_str(author_royalties)?,
+            reorder_threshold,
+            stock,
+            discontinued,
+        )
+    };
+
+    let result = match book {
+        Ok(book) => create_book(&conn, book).await,
+        Err(e) => return render_error_template(e.to_string(), &conn, &None).await,
+    };
+
+    match result {
+        Ok(_) => {
+            let mut context = Context::new();
+            add_owner_tag(&Some(owner), &mut context);
+
+            context.insert("isbn", &isbn);
+
+            Template::render("create_book_success", context.into_json())
+        }
+        Err(e) => render_error_template(e.to_string(), &conn, &None).await,
+    }
 }

@@ -51,6 +51,8 @@ fn rocket() -> _ {
                 create_publisher,
                 sales_report_image,
                 reports_page,
+                create_book_page,
+                create_book_endpoint,
             ],
         )
         .mount("/style", FileServer::from("style/"))

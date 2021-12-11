@@ -59,8 +59,6 @@ pub mod error {
     pub enum CreatePublisherError {
         #[error("Internal DB error: `{0}`")]
         DBError(#[from] postgres::error::Error),
-        #[error("Publisher with that email exists")]
-        ConflictingEmailError,
     }
 }
 
@@ -961,5 +959,41 @@ pub mod query {
         publisher: PostgresInt,
     ) -> Result<Vec<(NaiveDate, i32)>, postgres::error::Error> {
         todo!()
+    }
+
+    pub async fn create_book(conn: &DbConn, book: Book) -> Result<(), postgres::error::Error> {
+        let Book {
+            isbn,
+            title,
+            author_name,
+            genre,
+            publisher,
+            num_pages,
+            price,
+            author_royalties,
+            reorder_threshold,
+            stock,
+            discontinued,
+        } = book;
+        conn.run(move |c| {
+            c.execute(
+                "
+                INSERT INTO base.book (isbn, author_name, genre, publisher_id, num_pages, price, author_royalties, reorder_threshold, title, stock, discontinued)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+                ",
+                &[&isbn, &author_name, &genre, &publisher, &num_pages, &price, &author_royalties, &reorder_threshold, &title, &stock, &discontinued],
+            )
+        }).await?;
+
+        Ok(())
+    }
+
+    pub async fn get_publishers(conn: &DbConn) -> Result<Vec<Publisher>, postgres::error::Error> {
+        Ok(conn
+            .run(|c| c.query("SELECT * FROM base.publisher;", &[]))
+            .await?
+            .iter()
+            .flat_map(|row| Publisher::from_row(&row))
+            .collect())
     }
 }

@@ -5,8 +5,8 @@
     <link rel="stylesheet" href="/style/owner_login.css" />
 {% endblock head %}
 
-{% block login_nav %}
-{% endblock login_nav %}
+{% block owner_login_nav %}
+{% endblock owner_login_nav %}
 
 {% block content %}
 

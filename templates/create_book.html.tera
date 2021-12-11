@@ -1,0 +1,71 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="/style/create_book.css" />
+{% endblock head %}
+
+{% block create_book_nav %}
+{% endblock create_book_nav %}
+
+{% block content %}
+
+<h1>Create Books</h1>
+
+<form action="/owner/create/book" method="post">
+  <ul>
+    <li>
+        <label for="isbn">ISBN:</label>
+        <input type="text" id="isbn" name="isbn" required></input>
+    </li>
+    <li>
+        <label for="title">Title:</label>
+        <input type="text" id="title" name="title" required></input>
+    </li>
+    <li>
+        <label for="author">Author Name:</label>
+        <input type="text" id="author" name="author_name" required></input>
+    </li>
+    <li>
+        <label for="genre">Genre:</label>
+        <input type="text" id="genre" name="genre" required></input>
+    </li>
+    <li>
+        <label for="publisher">Publisher:</label>
+        <select id="publisher" name="publisher_id">
+            {% for publisher in publishers %}
+            <option value="{{ publisher.id }}">{{publisher.name}} ({{publisher.email}})</option>
+            {% endfor %}
+        </select>
+    </li>
+    <li>
+        <label for="num-pages">Num Pages:</label>
+        <input type="number" id="num-pages" name="num_pages" required></input>
+    </li>
+    <li>
+        <label for="price">Price:</label>
+        <input type="number" id="price" name="price" required></input>
+    </li>
+    <li>
+        <label for="author-royalties">Author Royalties:</label>
+        <input type="number" id="author-royalties" name="author_royalties" step="0.01" required></input>
+    </li>
+    <li>
+        <label for="reorder-threshold">Reorder Threshold:</label>
+        <input type="number" id="reorder-threshold" name="reorder_threshold" required></input>
+    </li>
+    <li>
+        <label for="stock">Stock:</label>
+        <input type="number" id="stock" name="stock" required></input>
+    </li>
+    <li>
+        <label for="discontinued">Discontinued:</label>
+        <input type="checkbox" id="discontinued" name="discontinued"></input>
+    </li>
+      <button type="submit">Create Book</button>
+    </li>
+  </ul>
+</form>
+
+
+{% endblock content %}

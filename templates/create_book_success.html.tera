@@ -1,0 +1,16 @@
+{% extends "base" %}
+
+{% block head %}
+    <link rel="stylesheet" href="/style/create_book_success.css" />
+{% endblock head %}
+
+{% block content %}
+<h1>Create Book Success</h1>
+<div class="message">
+    Book creation was successful.
+</div>
+<div class="home-container">
+<button onclick="window.location.replace(window.location.origin + '/book/{{ isbn }}')">See Book</button>
+<button onclick="window.location.replace(window.location.origin)">Homepage</button>
+</div>
+{% endblock content %}

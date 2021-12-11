@@ -56,6 +56,9 @@
                             {% block create_pub_nav %}
                             <a href="/owner/create/publisher">Create Publisher</a>
                             {% endblock create_pub_nav %}
+                            {% block create_book_nav %}
+                            <a href="/owner/create/book">Create Book</a>
+                            {% endblock create_book_nav %}
                             {% block logout_nav %}
                             <button class="btn-link" onclick="
                                             async function task() {
