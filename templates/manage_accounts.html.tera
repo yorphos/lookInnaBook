@@ -1,0 +1,54 @@
+{% extends "base" %}
+
+
+{% block head %}
+    <link rel="stylesheet" href="/style/manage_accounts.css" />
+{% endblock head %}
+
+{% block manage_accounts_nav %}
+{% endblock manage_accounts_nav %}
+
+{% block content %}
+
+<h1>Create Owner Account</h1>
+
+<form action="/owner/manage/owner/create" method="post">
+  <ul>
+    <li>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required></input>
+    </li>
+    <li>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required></input>
+    </li>
+    <li>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required></input>
+    </li>
+    <li>
+      <button type="submit">Create</button>
+    </li>
+  </ul>
+</form>
+
+<h1>Owner Accounts</h1>
+{% for owner in owners %}
+<div>
+<p>Name: {{owner.name}}</p>
+<p>Email: {{owner.email}}</p>
+<p><a href="/owner/manage/owner/delete/{{ owner.owner_id }}">Delete</a></p>
+</div>
+{% endfor %}
+
+<h1>Customer Accounts</h1>
+{% for customer in customers %}
+<div>
+<p>Name: {{customer.name}}</p>
+<p>Email: {{customer.email}}</p>
+<p><a href="/owner/manage/customer/delete/{{ customer.customer_id }}">Delete</a></p>
+
+</div>
+{% endfor %}
+
+{% endblock content %}

@@ -60,11 +60,29 @@ pub mod error {
         #[error("Internal DB error: `{0}`")]
         DBError(#[from] postgres::error::Error),
     }
+
+    #[derive(Debug, Error)]
+    pub enum CreateCustomerError {
+        #[error("Internal DB error: `{0}`")]
+        DBError(#[from] postgres::error::Error),
+        #[error("Internal bcrypt error")]
+        BCryptError(#[from] bcrypt::BcryptError),
+    }
+
+    #[derive(Debug, Error)]
+    pub enum CreateOwnerError {
+        #[error("Internal DB error: `{0}`")]
+        DBError(#[from] postgres::error::Error),
+        #[error("Internal bcrypt error")]
+        BCryptError(#[from] bcrypt::BcryptError),
+    }
 }
 
 pub mod query {
     use super::conn::DbConn;
     use super::error::CartError;
+    use super::error::CreateCustomerError;
+    use super::error::CreateOwnerError;
     use super::error::CreatePublisherError;
     use super::error::LoginError;
     use super::error::OrderError;
@@ -180,9 +198,6 @@ pub mod query {
             }
 
             let year = split.next()?.parse().ok()?;
-            if year < 21 {
-                return None;
-            }
 
             if split.next().is_some() {
                 return None;
@@ -226,7 +241,7 @@ pub mod query {
         name: T,
         address: no_id::Address,
         payment_info: no_id::PaymentInfo,
-    ) -> Result<PostgresInt, Box<dyn std::error::Error>> {
+    ) -> Result<PostgresInt, CreateCustomerError> {
         let name = name.as_ref().to_string();
         let email = email.as_ref().to_string();
         let password = password.as_ref().to_string();
@@ -245,6 +260,29 @@ pub mod query {
             })
             .await?
             .get("customer_id"))
+    }
+
+    pub async fn try_create_new_owner<'a, T: AsRef<str>>(
+        conn: &DbConn,
+        email: T,
+        password: T,
+        name: T,
+    ) -> Result<PostgresInt, CreateOwnerError> {
+        let name = name.as_ref().to_string();
+        let email = email.as_ref().to_string();
+        let password = password.as_ref().to_string();
+
+        let password_hash = bcrypt::hash(password, 10)?;
+
+        Ok(conn
+            .run(move |c| {
+                c.query_one(
+                    "INSERT INTO base.owner (name, email, password_hash) VALUES ($1, $2, $3) RETURNING owner_id;",
+                    &[&name, &email, &password_hash],
+                )
+            })
+            .await?
+            .get("owner_id"))
     }
 
     pub async fn owner_exists(conn: &DbConn) -> Result<bool, postgres::error::Error> {
@@ -1007,5 +1045,81 @@ pub mod query {
             .iter()
             .flat_map(|row| Publisher::from_row(&row))
             .collect())
+    }
+
+    pub async fn get_owner_accounts(
+        conn: &DbConn,
+    ) -> Result<Vec<OwnerLogin>, postgres::error::Error> {
+        Ok(conn
+            .run(|c| c.query("SELECT owner_id, name, email FROM base.owner;", &[]))
+            .await?
+            .iter()
+            .flat_map(|row| {
+                let result: Result<OwnerLogin, postgres::error::Error> = try {
+                    OwnerLogin {
+                        owner_id: row.try_get("owner_id")?,
+                        email: row.try_get("email")?,
+                        name: row.try_get("name")?,
+                    }
+                };
+
+                result.ok()
+            })
+            .collect())
+    }
+
+    pub async fn get_customer_accounts(
+        conn: &DbConn,
+    ) -> Result<Vec<CustomerLogin>, postgres::error::Error> {
+        Ok(conn
+            .run(|c| c.query("SELECT customer_id, name, email FROM base.customer;", &[]))
+            .await?
+            .iter()
+            .flat_map(|row| {
+                let result: Result<CustomerLogin, postgres::error::Error> = try {
+                    CustomerLogin {
+                        customer_id: row.try_get("customer_id")?,
+                        email: row.try_get("email")?,
+                        name: row.try_get("name")?,
+                    }
+                };
+
+                result.ok()
+            })
+            .collect())
+    }
+
+    pub async fn delete_customer_account(
+        conn: &DbConn,
+        customer_id: PostgresInt,
+    ) -> Result<(), postgres::error::Error> {
+        conn.run(move |c| {
+            c.execute(
+                "DELETE FROM base.customer WHERE customer_id = $1;",
+                &[&customer_id],
+            )
+        })
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_owner_account(
+        conn: &DbConn,
+        owner_id: PostgresInt,
+    ) -> Result<(), postgres::error::Error> {
+        conn.run(move |c| c.execute("DELETE FROM base.owner WHERE owner_id = $1;", &[&owner_id]))
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn does_owner_exist(conn: &DbConn) -> Result<bool, postgres::error::Error> {
+        Ok(conn
+            .run(|c| c.query("SELECT owner_id FROM base.owner;", &[]))
+            .await?
+            .iter()
+            .count()
+            > 0)
     }
 }

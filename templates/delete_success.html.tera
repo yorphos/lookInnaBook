@@ -1,0 +1,15 @@
+{% extends "base" %}
+
+{% block head %}
+    <link rel="stylesheet" href="/style/delete_success.css" />
+{% endblock head %}
+
+{% block content %}
+<h1>Delete Success</h1>
+<div class="message">
+    Account has been successfully deleted.
+</div>
+<div class="home-container">
+<button onclick="window.location.replace(window.location.origin + '/owner/manage/accounts')">Go Back</button>
+</div>
+{% endblock content %}

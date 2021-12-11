@@ -1,7 +1,7 @@
 use chrono::Local;
 use rocket::{http, outcome::Outcome, request::FromRequest};
 
-use crate::schema::entities::PostgresInt;
+use crate::{db::query::does_owner_exist, schema::entities::PostgresInt};
 
 use self::state::{SessionTokens, SessionType};
 
@@ -80,9 +80,18 @@ impl<'r> FromRequest<'r> for Owner {
                         owner: OwnerType::OwnerAccount(owner_id),
                     },
                     &SessionType::DefaultOwner => {
+                        let conn = request.rocket().state::<crate::DbConn>().ok_or(())?;
+
+                        // Short circuit so we avoid DB access if possible
                         if does_owner_session_token_exist(&session_tokens) {
                             Err(())?
                         } else {
+                            let does_owner_exist = does_owner_exist(conn).await.unwrap_or(true);
+
+                            if does_owner_exist {
+                                Err(())?
+                            }
+
                             Owner {
                                 owner: OwnerType::DefaultOwner,
                             }
