@@ -4,11 +4,13 @@ use std::collections::{HashMap, HashSet};
 use crate::db::conn::DbConn;
 use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
-    add_to_cart, cart_set_book_quantity, create_book, discontinue_books, get_books,
-    get_books_for_order, get_books_with_publisher_name, get_customer_cart, get_customer_info,
-    get_customer_orders_info, get_order_info, get_publishers, get_sales_by_date,
-    get_sales_by_publisher, try_create_new_customer, try_create_publisher, undiscontinue_books,
-    validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
+    add_to_cart, cart_set_book_quantity, create_book, delete_customer_account,
+    delete_owner_account, discontinue_books, get_books, get_books_for_order,
+    get_books_with_publisher_name, get_customer_accounts, get_customer_cart, get_customer_info,
+    get_customer_orders_info, get_order_info, get_owner_accounts, get_publishers,
+    get_sales_by_date, get_sales_by_publisher, try_create_new_customer, try_create_new_owner,
+    try_create_publisher, undiscontinue_books, validate_customer_login, validate_owner_login,
+    Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
@@ -349,7 +351,7 @@ pub async fn register(conn: DbConn, register_data: Form<Register<'_>>) -> Redire
         no_id::PaymentInfo::new(name_on_card, expiry, card_number, cvv, billing_address);
 
     match try_create_new_customer(&conn, email, password, name, address, payment_info).await {
-        Ok(_) => Redirect::to(uri!(customer_page())),
+        Ok(_) => Redirect::to("/"),
         Err(e) => Redirect::to(uri!(register_failed(format!("{:?}", e)))),
     }
 }
@@ -755,7 +757,7 @@ pub async fn owner_login(
                 let expiry = Local::now() + Duration::days(30);
 
                 session_tokens.insert(token, (SessionType::Owner(owner_id), expiry));
-                Redirect::to(uri!(customer_page()))
+                Redirect::to(uri!("/"))
             }
         },
         Err(e) => Redirect::to(uri!(login_failed(e.to_string()))),
@@ -1063,5 +1065,110 @@ pub async fn create_book_endpoint(
             Template::render("create_book_success", context.into_json())
         }
         Err(e) => render_error_template(e.to_string(), &conn, &None).await,
+    }
+}
+
+#[get("/owner/manage/accounts")]
+pub async fn manage_accounts(conn: DbConn, owner: Owner) -> Template {
+    let mut context = Context::new();
+
+    add_owner_tag(&Some(owner), &mut context);
+
+    let owners = get_owner_accounts(&conn).await.unwrap_or(vec![]);
+    let customers = get_customer_accounts(&conn).await.unwrap_or(vec![]);
+
+    context.insert("owners", &owners);
+    context.insert("customers", &customers);
+
+    Template::render("manage_accounts", context.into_json())
+}
+
+#[get("/owner/manage/customer/delete/<customer_id>")]
+pub async fn delete_customer_page(owner: Owner, customer_id: PostgresInt) -> Template {
+    let mut context = Context::new();
+
+    add_owner_tag(&Some(owner), &mut context);
+
+    context.insert("customer_id", &customer_id);
+
+    Template::render("confirm_delete", context.into_json())
+}
+
+#[get("/owner/manage/owner/delete/<owner_id>")]
+pub async fn delete_owner_page(owner: Owner, owner_id: PostgresInt) -> Template {
+    let mut context = Context::new();
+
+    add_owner_tag(&Some(owner), &mut context);
+
+    context.insert("customer_id", &owner_id);
+
+    Template::render("confirm_delete", context.into_json())
+}
+
+#[get("/success/delete")]
+pub async fn delete_success_page(owner: Owner) -> Template {
+    let mut context = Context::new();
+
+    add_owner_tag(&Some(owner), &mut context);
+
+    Template::render("delete_success", context.into_json())
+}
+
+#[get("/error/<error>")]
+pub async fn error_page(
+    conn: DbConn,
+    error: &'_ str,
+    customer: Option<Customer>,
+    owner: Option<Owner>,
+) -> Template {
+    let mut context = Context::new();
+
+    add_owner_tag(&owner, &mut context);
+
+    render_error_template(error, &conn, &customer).await
+}
+
+#[post("/owner/manage/customer/delete/<customer_id>")]
+pub async fn delete_customer_endpoint(
+    conn: DbConn,
+    _owner: Owner,
+    customer_id: PostgresInt,
+) -> Result<(), (Status, String)> {
+    match delete_customer_account(&conn, customer_id).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err((Status::InternalServerError, e.to_string())),
+    }
+}
+
+#[post("/owner/manage/owner/delete/<owner_id>")]
+pub async fn delete_owner_endpoint(
+    conn: DbConn,
+    _owner: Owner,
+    owner_id: PostgresInt,
+) -> Result<(), (Status, String)> {
+    match delete_owner_account(&conn, owner_id).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err((Status::InternalServerError, e.to_string())),
+    }
+}
+
+#[derive(FromForm)]
+pub struct RegisterOwner<'r> {
+    email: &'r str,
+    name: &'r str,
+    password: &'r str,
+}
+
+#[post("/owner/manage/owner/create", data = "<owner_data>")]
+pub async fn create_owner(conn: DbConn, owner_data: Form<RegisterOwner<'_>>) -> Redirect {
+    let RegisterOwner {
+        email,
+        name,
+        password,
+    } = *owner_data;
+
+    match try_create_new_owner(&conn, email, password, name).await {
+        Ok(_) => Redirect::to("/"),
+        Err(e) => Redirect::to(uri!(register_failed(format!("{:?}", e)))),
     }
 }

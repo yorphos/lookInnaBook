@@ -8,6 +8,20 @@ pub mod entities {
     pub type PublisherID = PostgresInt;
 
     #[derive(Serialize, Clone, Debug)]
+    pub struct OwnerLogin {
+        pub owner_id: PostgresInt,
+        pub email: String,
+        pub name: String,
+    }
+
+    #[derive(Serialize, Clone, Debug)]
+    pub struct CustomerLogin {
+        pub customer_id: PostgresInt,
+        pub email: String,
+        pub name: String,
+    }
+
+    #[derive(Serialize, Clone, Debug)]
     pub struct Publisher {
         pub publisher_id: PublisherID,
         pub company_name: String,

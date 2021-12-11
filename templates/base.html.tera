@@ -47,6 +47,9 @@
                                              ">Logout</button>
                             {% endblock logout_nav %}
                         {% elif owner_logged_in %}
+                            {% block manage_accounts_nav %}
+                            <a href="/owner/manage/accounts">Manage Accounts</a>
+                            {% endblock manage_accounts_nav %}
                             {% block reports_nav %}
                             <a href="/owner/reports/">View Reports</a>
                             {% endblock reports_nav %}

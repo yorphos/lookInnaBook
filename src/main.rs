@@ -53,6 +53,14 @@ fn rocket() -> _ {
                 reports_page,
                 create_book_page,
                 create_book_endpoint,
+                manage_accounts,
+                delete_owner_page,
+                delete_customer_page,
+                delete_customer_endpoint,
+                delete_owner_endpoint,
+                delete_success_page,
+                error_page,
+                create_owner,
             ],
         )
         .mount("/style", FileServer::from("style/"))

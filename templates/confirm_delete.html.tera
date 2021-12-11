@@ -1,0 +1,47 @@
+{% extends "base" %}
+
+{% block head %}
+    <link rel="stylesheet" href="/style/confirm_delete.css" />
+    <script type="text/javascript">
+        async function confirmDelete() {
+            {% if customer_id %}
+            let customer_id = "{{ customer_id }}";
+
+            let response = await fetch(window.location.origin + '/owner/manage/customer/delete/' + customer_id, {
+                method: 'POST',
+            });
+
+            if (response.status == 200) {
+                window.location.replace(window.location.origin + '/success/delete'); 
+            } else { 
+                window.location.replace(window.location.origin + '/error/DeleteFailure'); 
+            }
+            {% endif %}
+
+            {% if owner_id %}
+            let owner_id = "{{ owner_id }}";
+
+            let response = await fetch(window.location.origin + '/owner/manage/owner/delete/' + owner_id, {
+                method: 'POST',
+            });
+
+            if (response.status == 200) {
+                window.location.replace(window.location.origin + '/success/delete'); 
+            } else { 
+                window.location.replace(window.location.origin + '/error/DeleteFailure'); 
+            }
+            {% endif %}
+        }
+             </script>
+{% endblock head %}
+
+{% block content %}
+<h1>Confirm Delete</h1>
+<div class="message">
+    Are you sure you would like to delete this account?
+</div>
+<div class="btn-container">
+<button onclick="confirmDelete()">Confirm</button>
+<button onclick="history.back()">Cancel</button>
+</div>
+{% endblock content %}
