@@ -1,70 +1,213 @@
 @import "header.css";
 
+#content {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr max-content;
+}
+
+.search-bar {
+  display: grid;
+  grid-template-rows: 1em auto;
+  grid-template-columns: 1em auto;
+  margin: 0 0.5%;
+  grid-row: 1;
+  grid-row-gap: 0.5em;
+  margin-top: 0.5em;
+}
+
 .books {
-    display: flex;
-    flex-flow: row;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-auto-rows: 1fr;
 }
 
 .book {
-    display: flex;
-    flex-flow: column;
-    align-items: center;
-    padding: 1%;
-    border: solid;
-    margin: 1%;
-    max-width: 225px;
-    min-width: 225px;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 80%;
 }
 
-form {
-  width: 500px;
-  margin-left: 5%;
+.book h4 {
+  margin-bottom: 0;
+}
+
+.book .inner {
+  position: relative;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+  border-radius: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.book .inner .hover-info {
+  position: absolute;
+  bottom: -1em;
+  display: flex;
+  transform: translateY(1em);
+  transition: 0.5s;
+  opacity: 0;
+}
+
+.book .inner:hover .hover-info {
+  transform: translateY(0px);
+  opacity: 1;
+}
+
+.book .inner .content {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  transition: 0.5s;
+  margin: 2em;
+  width: 20em;
+}
+
+.book .inner:hover .content {
+  transform: translateY(-20px);
+}
+.book .inner .content .image-wrapper {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  overflow: hidden;
+}
+
+.book .inner .content .image-wrapper image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#search-form {
+  width: 98.4%;
   /* Form outline */
-  padding: 1em;
-  border: 1px solid #CCC;
+  padding: 0.75%;
+  border: 1px solid #ccc;
   border-radius: 1em;
+  grid-column: 1 / 3;
 }
 
-ul {
+#search-form ul {
+  display: grid;
+  grid-gap: 0.3em;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-rows: 1fr;
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-form li + li {
-  margin-top: 1em;
+li#search-buttons {
+  width: 20%;
+  margin: 0 auto;
+  grid-column: 1 / 4;
 }
 
-label {
+li#search-buttons ul {
+  display: grid;
+  grid-template-columns: max-content min-content;
+  grid-template-rows: 1fr 1fr;
+}
+
+li#search-buttons .check-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr;
+  grid-column: 1;
+}
+
+li#search-buttons .submit-item {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+li#search-buttons .submit-item {
+  margin: auto;
+}
+
+.check-item label {
+  margin: 5% 0;
+}
+
+#search-form li {
+  display: inline;
+}
+
+#search-form ul .input-wrapper {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+#search-form label {
   /* Uniform size & alignment */
   display: inline-block;
-  text-align: right;
+  text-align: left;
+  font-size: 12px;
 }
 
-input {
+#search-form input[type="text"],
+#search-form input[type="number"] {
   /* To make sure that all text fields have the same font settings
      By default, textareas have a monospace font */
   font: 1em sans-serif;
 
   /* Uniform text field size */
-  width: 300px;
+  width: 100%;
   box-sizing: border-box;
 
   /* Match form field borders */
   border: 1px solid #999;
 }
 
-.button {
-  /* Align buttons with the text fields */
-  padding-left: 90px; /* same size as the label elements */
+#search-form input[type="checkbox"] {
+  padding: 0;
+  margin: 5% 0;
+  width: 50%;
 }
 
 button {
   /* This extra margin represent roughly the same space as the space
      between the labels and their text fields */
-  margin-left: .5em;
+  margin-left: 0.5em;
 }
 
 .discontinued {
   color: red;
+}
+
+#toggle-search ~ #search-form {
+  display: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0s linear 0.33s, opacity 0.33s linear;
+}
+
+#toggle-search:checked ~ #search-form {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0s;
+  margin: 0;
+}
+
+#toggle-search:not(:checked) {
+  height: 100%;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+#toggle-search:not(:checked) ~ .books {
+  grid-row: 1 / 3;
 }
