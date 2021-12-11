@@ -956,9 +956,21 @@ pub mod query {
 
     pub async fn get_sales_by_publisher(
         conn: &DbConn,
-        publisher: PostgresInt,
-    ) -> Result<Vec<(NaiveDate, i32)>, postgres::error::Error> {
-        todo!()
+        publisher_id: PostgresInt,
+    ) -> Result<Vec<(NaiveDate, i64)>, postgres::error::Error> {
+        let rows = conn
+            .run(move |c| c.query("SELECT order_date, sum(quantity) as quantity FROM base.raw_sales_data WHERE publisher_id = $1 GROUP BY (order_date);", &[&publisher_id]))
+            .await?;
+
+        Ok(rows
+            .iter()
+            .flat_map(|row| {
+                let result: Result<(NaiveDate, i64), postgres::error::Error> =
+                    try { (row.try_get("order_date")?, row.try_get("quantity")?) };
+
+                result.ok()
+            })
+            .collect())
     }
 
     pub async fn create_book(conn: &DbConn, book: Book) -> Result<(), postgres::error::Error> {

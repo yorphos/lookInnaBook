@@ -7,15 +7,15 @@ use crate::db::query::{
     add_to_cart, cart_set_book_quantity, create_book, discontinue_books, get_books,
     get_books_for_order, get_books_with_publisher_name, get_customer_cart, get_customer_info,
     get_customer_orders_info, get_order_info, get_publishers, get_sales_by_date,
-    try_create_new_customer, try_create_publisher, undiscontinue_books, validate_customer_login,
-    validate_owner_login, Expiry, OwnerLoginType,
+    get_sales_by_publisher, try_create_new_customer, try_create_publisher, undiscontinue_books,
+    validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
 use crate::schema::joined::Order;
 use crate::schema::no_id::{Address, PaymentInfo};
 use crate::schema::{self, no_id};
-use chrono::{Duration, Local};
+use chrono::{Duration, Local, NaiveDate};
 use rand::{RngCore, SeedableRng};
 use rocket::form::validate::Contains;
 use rocket::form::Form;
@@ -859,7 +859,7 @@ pub async fn create_publisher(
 }
 
 #[get("/owner/reports")]
-pub async fn reports_page(conn: DbConn, owner: Owner) -> Template {
+pub async fn reports_page(owner: Owner) -> Template {
     let mut context = Context::new();
     add_owner_tag(&Some(owner), &mut context);
 
@@ -867,30 +867,95 @@ pub async fn reports_page(conn: DbConn, owner: Owner) -> Template {
 }
 
 #[get("/owner/reports/sales")]
-pub async fn sales_report_image(conn: DbConn) -> (ContentType, String) {
+pub async fn sales_report_image(conn: DbConn, _owner: Owner) -> (ContentType, String) {
     let sales_by_date = get_sales_by_date(&conn).await.unwrap();
 
     let today = Local::today().naive_local();
-    let sales_by_days_previous: Vec<(i128, i128)> = sales_by_date
+    // Converts the date indexing to days since today
+    let map_sales = |sales: Vec<(NaiveDate, i64)>| {
+        let mapped_sales: Vec<(i128, i128)> = sales
+            .into_iter()
+            .map(|(date, quantity)| {
+                (
+                    -today.signed_duration_since(date).num_days() as i128,
+                    quantity as i128,
+                )
+            })
+            .collect();
+
+        mapped_sales
+    };
+
+    let total_sales: Vec<(i128, i128)> = map_sales(sales_by_date);
+    let publishers = match get_publishers(&conn).await {
+        Ok(v) => v,
+        Err(_) => vec![],
+    };
+
+    let mut sales_data: Vec<(String, Vec<(i128, i128)>)> =
+        vec![("Total Sales".to_string(), total_sales)];
+
+    for publisher in publishers {
+        let sales = get_sales_by_publisher(&conn, publisher.publisher_id).await;
+        if let Ok(sales) = sales {
+            sales_data.push((publisher.company_name.clone(), map_sales(sales)));
+        }
+    }
+
+    let days_included = sales_data
+        .iter()
+        .map(|(_, data)| data.iter().map(|(day, _)| *day))
+        .flatten()
+        .collect::<HashSet<i128>>();
+
+    // Add missing dates as 0 data points
+    for (_, data) in &mut sales_data {
+        let days: Vec<i128> = data.iter().map(|(day, _)| *day).collect();
+        for day in &days_included {
+            if !days.contains(*day) {
+                data.push((*day, 0));
+            }
+        }
+    }
+
+    let earliest_day = *sales_data
+        .iter()
+        .map(|(_, data)| data)
+        .flatten()
+        .map(|(days_since_today, _)| days_since_today)
+        .min()
+        .unwrap_or(&0);
+
+    let mut sales_data_as_days_since_earliest: Vec<(String, Vec<(i128, i128)>)> = sales_data
         .into_iter()
-        .map(|(date, quantity)| {
+        .map(|(name, data)| {
             (
-                today.signed_duration_since(date).num_days() as i128,
-                quantity as i128,
+                name,
+                data.into_iter()
+                    .map(|(days_since_today, quantity)| (days_since_today - earliest_day, quantity))
+                    .collect(),
             )
         })
         .collect();
 
+    for (_, data) in &mut sales_data_as_days_since_earliest {
+        data.sort_by(|(x0, _), (x1, _)| x0.cmp(x1));
+    }
+
     let mut s = poloto::plot("Book Sales", "Date", "Sales (1 Book)");
 
-    s.line("Total Sales", sales_by_days_previous);
+    s.ymarker(-1);
+
+    for (name, data) in sales_data_as_days_since_earliest {
+        s.line(name, data);
+    }
 
     s.xinterval_fmt(|fmt, val, _| {
         write!(
             fmt,
             "{}",
             today
-                .checked_add_signed(Duration::days(val as i64))
+                .checked_add_signed(Duration::days((val + earliest_day) as i64))
                 .unwrap_or(today)
                 .to_string()
         )
