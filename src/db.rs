@@ -937,4 +937,29 @@ pub mod query {
             (company_name, phone_number, bank_number, address_id, email) VALUES ($1, $2, $3, $4, $5) RETURNING publisher_id;",
             &[&company_name, &phone_number, &bank_number, &address_id, &email]) ).await?.try_get("publisher_id")?)
     }
+
+    pub async fn get_sales_by_date(
+        conn: &DbConn,
+    ) -> Result<Vec<(NaiveDate, i64)>, postgres::error::Error> {
+        let rows = conn
+            .run(|c| c.query("SELECT * FROM base.sales;", &[]))
+            .await?;
+
+        Ok(rows
+            .iter()
+            .flat_map(|row| {
+                let result: Result<(NaiveDate, i64), postgres::error::Error> =
+                    try { (row.try_get("order_date")?, row.try_get("quantity")?) };
+
+                result.ok()
+            })
+            .collect())
+    }
+
+    pub async fn get_sales_by_publisher(
+        conn: &DbConn,
+        publisher: PostgresInt,
+    ) -> Result<Vec<(NaiveDate, i32)>, postgres::error::Error> {
+        todo!()
+    }
 }

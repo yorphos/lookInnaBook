@@ -1,0 +1,14 @@
+{% extends "base" %}
+
+{% block head %}
+<link rel="stylesheet" href="/style/reports.css" />
+{% endblock head %}
+
+{% block reports_nav %}
+{% endblock reports_nav %}
+
+{% block content %}
+
+<img src="/owner/reports/sales"></img>
+
+{% endblock content %}

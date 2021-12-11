@@ -4,9 +4,6 @@
 <link rel="stylesheet" href="/style/order.css" />
 {% endblock head %}
 
-{% block home_nav %}
-{% endblock home_nav %}
-
 {% block content %}
 
 <h4>{{ order.order_date }}</h4>

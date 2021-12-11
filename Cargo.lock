@@ -991,6 +991,7 @@ dependencies = [
  "bcrypt",
  "chrono",
  "dotenv",
+ "poloto",
  "postgres",
  "rand",
  "rand_chacha",
@@ -1392,6 +1393,15 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "poloto"
+version = "3.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1b3bd65f6e9baf5ef530fdd724112a1393ff76ae359dae0982457e114b3680"
+dependencies = [
+ "tagger",
+]
 
 [[package]]
 name = "polyval"
@@ -2050,6 +2060,12 @@ dependencies = [
  "quote",
  "unicode-xid",
 ]
+
+[[package]]
+name = "tagger"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ebdb5588f490ba960dea65d7a6dc05fb788e2df62fe3f4cc2f0d53ca7473e66"
 
 [[package]]
 name = "tempfile"

@@ -6,19 +6,20 @@ use crate::db::error::{CartError, OrderError, StateError};
 use crate::db::query::{
     add_to_cart, cart_set_book_quantity, discontinue_books, get_books, get_books_for_order,
     get_books_with_publisher_name, get_customer_cart, get_customer_info, get_customer_orders_info,
-    get_order_info, try_create_new_customer, try_create_publisher, undiscontinue_books,
-    validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
+    get_order_info, get_sales_by_date, try_create_new_customer, try_create_publisher,
+    undiscontinue_books, validate_customer_login, validate_owner_login, Expiry, OwnerLoginType,
 };
 use crate::request_guards::state::SessionType;
 use crate::schema::entities::{Book, BookWithPublisherName, PostgresInt, ISBN};
 use crate::schema::joined::Order;
 use crate::schema::no_id::{Address, PaymentInfo};
 use crate::schema::{self, no_id};
-use chrono::{Duration, Local};
+use chrono::{Duration, Local, NaiveDate};
+use poloto::PlotNum;
 use rand::{RngCore, SeedableRng};
 use rocket::form::validate::Contains;
 use rocket::form::Form;
-use rocket::http::{Cookie, CookieJar, Status};
+use rocket::http::{ContentType, Cookie, CookieJar, Status};
 use rocket::response::Redirect;
 use rocket::serde::json::Json;
 use rocket::State;
@@ -855,4 +856,47 @@ pub async fn create_publisher(
         }
         Err(e) => render_error_template(e.to_string(), &conn, &None).await,
     }
+}
+
+#[get("/owner/reports")]
+pub async fn reports_page(conn: DbConn, owner: Owner) -> Template {
+    let mut context = Context::new();
+    add_owner_tag(&Some(owner), &mut context);
+
+    Template::render("reports", context.into_json())
+}
+
+#[get("/owner/reports/sales")]
+pub async fn sales_report_image(conn: DbConn) -> (ContentType, String) {
+    let sales_by_date = get_sales_by_date(&conn).await.unwrap();
+
+    let today = Local::today().naive_local();
+    let sales_by_days_previous: Vec<(i128, i128)> = sales_by_date
+        .into_iter()
+        .map(|(date, quantity)| {
+            (
+                today.signed_duration_since(date).num_days() as i128,
+                quantity as i128,
+            )
+        })
+        .collect();
+
+    let mut s = poloto::plot("Book Sales", "Date", "Sales (1 Book)");
+
+    s.line("Total Sales", sales_by_days_previous);
+
+    s.xinterval_fmt(|fmt, val, _| {
+        write!(
+            fmt,
+            "{}",
+            today
+                .checked_add_signed(Duration::days(val as i64))
+                .unwrap_or(today)
+                .to_string()
+        )
+    });
+
+    let svg = poloto::disp(|a| poloto::simple_theme(a, s)).to_string();
+
+    (ContentType::SVG, svg)
 }
