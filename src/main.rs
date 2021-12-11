@@ -56,7 +56,6 @@ fn rocket() -> _ {
             ],
         )
         .mount("/style", FileServer::from("style/"))
-        .mount("/images", FileServer::from("image/"))
         .manage(SessionTokenState::new(Mutex::new(SessionTokens::new())))
         .attach(DbConn::fairing())
         .attach(Template::fairing())
